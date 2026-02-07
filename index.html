@@ -24,13 +24,13 @@
     }
     .wrap {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
-      gap: 10px;
-      width: 520px;
+      gap: 12px;
     }
     .scores-table {
-      width: 100%;
+      flex-shrink: 0;
+      width: 380px;
       background: linear-gradient(90deg, #e60000 0%, #0066b1 100%);
       background-clip: padding-box;
       -webkit-background-clip: padding-box;
@@ -51,28 +51,31 @@
     .scores-table .pts-cell { min-width: 64px; font-weight: 700; color: #fff; text-align: center; }
     .scores-table .pts-cell .d { color: rgba(255,255,255,0.6); margin: 0 2px; font-weight: 600; }
     .main-scoreboard {
-      width: 100%;
+      flex-shrink: 0;
+      width: 560px;
       display: flex;
       flex-direction: row;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 28px;
+      padding: 14px 32px;
       background: linear-gradient(90deg, #e60000 0%, #0066b1 100%);
       border-radius: 10px;
     }
-    .team-name { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .team-name { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .team-totals {
       display: flex;
       flex-direction: row;
       align-items: center;
-      gap: 20px;
+      gap: 24px;
       background: rgba(0,0,0,0.25);
-      padding: 8px 28px;
+      padding: 10px 36px;
       border-radius: 8px;
-      margin: 0 16px;
+      margin: 0 20px;
+      min-width: 180px;
+      justify-content: center;
     }
     .team-total-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.05em; }
-    .team-total-value { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .team-total-value { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.3); min-width: 44px; text-align: center; }
   </style>
 </head>
 <body>

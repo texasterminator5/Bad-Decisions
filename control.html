@@ -75,7 +75,7 @@
     <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 16px;">5 players per team. Enter names and round scores; team totals are calculated automatically.</p>
     <div class="field" style="margin-bottom: 12px;">
       <label>Team 1 name</label>
-      <input type="text" id="team1" value="Team 1" placeholder="Team 1">
+      <input type="text" id="team1" value="Bad Decisions" placeholder="Team 1">
     </div>
     <div class="field" style="margin-bottom: 20px;">
       <label>Team 2 name</label>
@@ -84,46 +84,41 @@
     <div class="match-block">
       <h3>Match 1</h3>
       <div class="row">
-        <div class="field"><label>Team 1 player</label><input type="text" id="p1name1" placeholder="Name"></div>
-        <div class="field sm"><label>Pts</label><input type="number" id="p1pts1" value="0" min="0" max="99"></div>
-        <div class="field sm"><label>Opp</label><input type="number" id="p2pts1" value="0" min="0" max="99"></div>
-        <div class="field"><label>Team 2 player</label><input type="text" id="p2name1" placeholder="Name"></div>
+        <div class="field"><label>Player</label><input type="text" id="p1name1" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts1" value="" min="0" max="999" placeholder="0"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts1" value="" min="0" max="999" placeholder="0"></div>
       </div>
     </div>
     <div class="match-block">
       <h3>Match 2</h3>
       <div class="row">
-        <div class="field"><label>Team 1 player</label><input type="text" id="p1name2" placeholder="Name"></div>
-        <div class="field sm"><label>Pts</label><input type="number" id="p1pts2" value="0" min="0" max="99"></div>
-        <div class="field sm"><label>Opp</label><input type="number" id="p2pts2" value="0" min="0" max="99"></div>
-        <div class="field"><label>Team 2 player</label><input type="text" id="p2name2" placeholder="Name"></div>
+        <div class="field"><label>Player</label><input type="text" id="p1name2" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts2" value="" min="0" max="999" placeholder="0"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts2" value="" min="0" max="999" placeholder="0"></div>
       </div>
     </div>
     <div class="match-block">
       <h3>Match 3</h3>
       <div class="row">
-        <div class="field"><label>Team 1 player</label><input type="text" id="p1name3" placeholder="Name"></div>
-        <div class="field sm"><label>Pts</label><input type="number" id="p1pts3" value="0" min="0" max="99"></div>
-        <div class="field sm"><label>Opp</label><input type="number" id="p2pts3" value="0" min="0" max="99"></div>
-        <div class="field"><label>Team 2 player</label><input type="text" id="p2name3" placeholder="Name"></div>
+        <div class="field"><label>Player</label><input type="text" id="p1name3" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts3" value="" min="0" max="999" placeholder="0"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts3" value="" min="0" max="999" placeholder="0"></div>
       </div>
     </div>
     <div class="match-block">
       <h3>Match 4</h3>
       <div class="row">
-        <div class="field"><label>Team 1 player</label><input type="text" id="p1name4" placeholder="Name"></div>
-        <div class="field sm"><label>Pts</label><input type="number" id="p1pts4" value="0" min="0" max="99"></div>
-        <div class="field sm"><label>Opp</label><input type="number" id="p2pts4" value="0" min="0" max="99"></div>
-        <div class="field"><label>Team 2 player</label><input type="text" id="p2name4" placeholder="Name"></div>
+        <div class="field"><label>Player</label><input type="text" id="p1name4" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts4" value="" min="0" max="999" placeholder="0"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts4" value="" min="0" max="999" placeholder="0"></div>
       </div>
     </div>
     <div class="match-block">
       <h3>Match 5</h3>
       <div class="row">
-        <div class="field"><label>Team 1 player</label><input type="text" id="p1name5" placeholder="Name"></div>
-        <div class="field sm"><label>Pts</label><input type="number" id="p1pts5" value="0" min="0" max="99"></div>
-        <div class="field sm"><label>Opp</label><input type="number" id="p2pts5" value="0" min="0" max="99"></div>
-        <div class="field"><label>Team 2 player</label><input type="text" id="p2name5" placeholder="Name"></div>
+        <div class="field"><label>Player</label><input type="text" id="p1name5" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts5" value="" min="0" max="999" placeholder="0"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts5" value="" min="0" max="999" placeholder="0"></div>
       </div>
     </div>
     <div class="live-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15);">
@@ -144,13 +139,14 @@
     <button class="btn btn-primary" id="copyUrl">Copy overlay URL</button>
     <button class="btn btn-secondary" id="pushNow">Push to Firebase now</button>
     <button class="btn btn-secondary" id="openUrl">Open overlay (preview)</button>
+    <button class="btn btn-secondary" id="resetBtn" style="margin-top: 12px; background: rgba(220,80,80,0.4);">Reset all fields</button>
     <div class="url-box" id="urlBox"></div>
   </div>
   <div class="toast" id="toast">URL copied to clipboard</div>
   <script>
     var LIVE_STORAGE = 'usa-pool-league-overlay-live';
     var ids = ['team1','team2'].concat(
-      [1,2,3,4,5].reduce(function(a,i){ a.push('p1name'+i,'p2name'+i,'p1pts'+i,'p2pts'+i); return a; }, [])
+      [1,2,3,4,5].reduce(function(a,i){ a.push('p1name'+i,'p1pts'+i,'p2pts'+i); return a; }, [])
     );
     function getState() {
       var o = {};
@@ -239,6 +235,21 @@
       });
     });
     document.getElementById('openUrl').addEventListener('click', function() { window.open(buildUrl(), '_blank'); });
+    document.getElementById('resetBtn').addEventListener('click', function() {
+      document.getElementById('team1').value = 'Bad Decisions';
+      document.getElementById('team2').value = 'Team 2';
+      for (var i = 1; i <= 5; i++) {
+        document.getElementById('p1name' + i).value = '';
+        document.getElementById('p1pts' + i).value = '';
+        document.getElementById('p2pts' + i).value = '';
+      }
+      updateUrlBox();
+      schedulePush();
+      var t = document.getElementById('toast');
+      t.textContent = 'All fields reset';
+      t.classList.add('show');
+      setTimeout(function() { t.classList.remove('show'); }, 2000);
+    });
     updateUrlBox();
   </script>
 </body>
