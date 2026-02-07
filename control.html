@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>USA Pool League Scoreboard Control</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #eee;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 24px; color: #fff; }
+    .row { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-end; }
+    .field { flex: 1; min-width: 0; }
+    .field.sm { flex: 0 0 70px; }
+    label { display: block; font-size: 0.8rem; color: rgba(255,255,255,0.7); margin-bottom: 4px; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+    input:focus { outline: none; border-color: #6366f1; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-primary { background: #6366f1; color: #fff; margin-bottom: 10px; }
+    .btn-secondary { background: rgba(255,255,255,0.15); color: #fff; }
+    .url-box {
+      margin-top: 20px;
+      padding: 12px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      font-size: 0.75rem;
+      word-break: break-all;
+      color: rgba(255,255,255,0.8);
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 20px;
+      background: #22c55e;
+      color: #fff;
+      border-radius: 8px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .toast.show { opacity: 1; }
+    .match-block { margin-bottom: 20px; padding: 12px; background: rgba(255,255,255,0.06); border-radius: 8px; }
+    .match-block h3 { font-size: 0.9rem; color: rgba(255,255,255,0.9); margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>USA Pool League scoreboard control</h1>
+    <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 16px;">5 players per team. Enter names and round scores; team totals are calculated automatically.</p>
+    <div class="field" style="margin-bottom: 12px;">
+      <label>Team 1 name</label>
+      <input type="text" id="team1" value="Team 1" placeholder="Team 1">
+    </div>
+    <div class="field" style="margin-bottom: 20px;">
+      <label>Team 2 name</label>
+      <input type="text" id="team2" value="Team 2" placeholder="Team 2">
+    </div>
+    <div class="match-block">
+      <h3>Match 1</h3>
+      <div class="row">
+        <div class="field"><label>Team 1 player</label><input type="text" id="p1name1" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts1" value="0" min="0" max="99"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts1" value="0" min="0" max="99"></div>
+        <div class="field"><label>Team 2 player</label><input type="text" id="p2name1" placeholder="Name"></div>
+      </div>
+    </div>
+    <div class="match-block">
+      <h3>Match 2</h3>
+      <div class="row">
+        <div class="field"><label>Team 1 player</label><input type="text" id="p1name2" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts2" value="0" min="0" max="99"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts2" value="0" min="0" max="99"></div>
+        <div class="field"><label>Team 2 player</label><input type="text" id="p2name2" placeholder="Name"></div>
+      </div>
+    </div>
+    <div class="match-block">
+      <h3>Match 3</h3>
+      <div class="row">
+        <div class="field"><label>Team 1 player</label><input type="text" id="p1name3" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts3" value="0" min="0" max="99"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts3" value="0" min="0" max="99"></div>
+        <div class="field"><label>Team 2 player</label><input type="text" id="p2name3" placeholder="Name"></div>
+      </div>
+    </div>
+    <div class="match-block">
+      <h3>Match 4</h3>
+      <div class="row">
+        <div class="field"><label>Team 1 player</label><input type="text" id="p1name4" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts4" value="0" min="0" max="99"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts4" value="0" min="0" max="99"></div>
+        <div class="field"><label>Team 2 player</label><input type="text" id="p2name4" placeholder="Name"></div>
+      </div>
+    </div>
+    <div class="match-block">
+      <h3>Match 5</h3>
+      <div class="row">
+        <div class="field"><label>Team 1 player</label><input type="text" id="p1name5" placeholder="Name"></div>
+        <div class="field sm"><label>Pts</label><input type="number" id="p1pts5" value="0" min="0" max="99"></div>
+        <div class="field sm"><label>Opp</label><input type="number" id="p2pts5" value="0" min="0" max="99"></div>
+        <div class="field"><label>Team 2 player</label><input type="text" id="p2name5" placeholder="Name"></div>
+      </div>
+    </div>
+    <div class="live-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15);">
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer;">
+        <input type="checkbox" id="liveMode" style="width: auto;">
+        <span>Live update (overlay auto-updates)</span>
+      </label>
+      <div class="field" style="margin-bottom: 10px;">
+        <label>Firebase Database URL</label>
+        <input type="text" id="firebaseUrl" placeholder="https://your-project.firebaseio.com">
+      </div>
+      <div class="field">
+        <label>Room ID</label>
+        <input type="text" id="roomId" placeholder="e.g. usa-pool-match-1">
+      </div>
+      <p style="font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-top: 8px;">Overlay refreshes every 2 seconds when live update is on.</p>
+    </div>
+    <button class="btn btn-primary" id="copyUrl">Copy overlay URL</button>
+    <button class="btn btn-secondary" id="openUrl">Open overlay (preview)</button>
+    <div class="url-box" id="urlBox"></div>
+  </div>
+  <div class="toast" id="toast">URL copied to clipboard</div>
+  <script>
+    var LIVE_STORAGE = 'usa-pool-league-overlay-live';
+    var ids = ['team1','team2'].concat(
+      [1,2,3,4,5].reduce(function(a,i){ a.push('p1name'+i,'p2name'+i,'p1pts'+i,'p2pts'+i); return a; }, [])
+    );
+    function getState() {
+      var o = {};
+      ids.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) o[id] = el.value != null ? el.value.trim() : '';
+      });
+      return o;
+    }
+    function buildUrl() {
+      var path = location.pathname.replace(/\/?control\.html$/, '') || '/';
+      var base = location.origin + (path.endsWith('/') ? path : path + '/') + 'index.html';
+      var liveMode = document.getElementById('liveMode').checked;
+      var dbUrl = document.getElementById('firebaseUrl').value.trim();
+      var roomId = document.getElementById('roomId').value.trim();
+      if (liveMode && dbUrl && roomId) {
+        return base + '?room=' + encodeURIComponent(roomId) + '&db=' + encodeURIComponent(dbUrl);
+      }
+      var s = getState();
+      var params = new URLSearchParams();
+      Object.keys(s).forEach(function(k) { if (s[k] !== '') params.set(k, s[k]); });
+      return base + '?' + params.toString();
+    }
+    function updateUrlBox() { document.getElementById('urlBox').textContent = 'Overlay URL: ' + buildUrl(); }
+    function pushToFirebase() {
+      var dbUrl = document.getElementById('firebaseUrl').value.trim();
+      var roomId = document.getElementById('roomId').value.trim();
+      if (!dbUrl || !roomId || !document.getElementById('liveMode').checked) return;
+      var url = dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(roomId) + '.json';
+      fetch(url, { method: 'PUT', body: JSON.stringify(getState()), headers: { 'Content-Type': 'application/json' } }).catch(function() {});
+    }
+    var pushDebounce;
+    function schedulePush() { clearTimeout(pushDebounce); pushDebounce = setTimeout(pushToFirebase, 400); }
+    function randomRoomId() { return 'usa-pool-' + Math.random().toString(36).slice(2, 10); }
+    (function loadSaved() {
+      try {
+        var s = localStorage.getItem(LIVE_STORAGE);
+        if (s) {
+          var d = JSON.parse(s);
+          if (d.firebaseUrl) document.getElementById('firebaseUrl').value = d.firebaseUrl;
+          if (d.roomId) document.getElementById('roomId').value = d.roomId;
+          else document.getElementById('roomId').value = randomRoomId();
+          if (d.liveMode) document.getElementById('liveMode').checked = true;
+        } else document.getElementById('roomId').value = randomRoomId();
+      } catch (e) {}
+    })();
+    function saveLiveSettings() {
+      try {
+        localStorage.setItem(LIVE_STORAGE, JSON.stringify({
+          firebaseUrl: document.getElementById('firebaseUrl').value.trim(),
+          roomId: document.getElementById('roomId').value.trim(),
+          liveMode: document.getElementById('liveMode').checked
+        }));
+      } catch (e) {}
+    }
+    ids.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.addEventListener('input', function() { updateUrlBox(); schedulePush(); }); el.addEventListener('change', function() { updateUrlBox(); schedulePush(); }); }
+    });
+    document.getElementById('firebaseUrl').addEventListener('change', saveLiveSettings);
+    document.getElementById('roomId').addEventListener('change', saveLiveSettings);
+    document.getElementById('liveMode').addEventListener('change', function() { saveLiveSettings(); updateUrlBox(); });
+    document.getElementById('copyUrl').addEventListener('click', function() {
+      var url = buildUrl();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+          var t = document.getElementById('toast');
+          t.textContent = 'URL copied to clipboard';
+          t.classList.add('show');
+          setTimeout(function() { t.classList.remove('show'); }, 2000);
+        });
+      } else document.getElementById('urlBox').textContent = 'Copy this URL: ' + url;
+    });
+    document.getElementById('openUrl').addEventListener('click', function() { window.open(buildUrl(), '_blank'); });
+    updateUrlBox();
+  </script>
+</body>
+</html>

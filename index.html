@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+  <title>USA Pool League Scoreboard Overlay</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: transparent;
+      position: relative;
+    }
+    .scale-root {
+      width: 1920px;
+      height: 1080px;
+      transform-origin: center center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 520px;
+    }
+    .scores-table {
+      width: 100%;
+      background: linear-gradient(90deg, #e60000 0%, #0066b1 100%);
+      background-clip: padding-box;
+      -webkit-background-clip: padding-box;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.2);
+      isolation: isolate;
+    }
+    .scores-table table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+    .scores-table th, .scores-table td {
+      padding: 8px 10px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .scores-table tr:last-child th, .scores-table tr:last-child td { border-bottom: none; }
+    .scores-table .row-label { width: 68px; min-width: 68px; padding-left: 12px; padding-right: 12px; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); text-transform: uppercase; letter-spacing: 0.03em; background: rgba(0,0,0,0.2); text-align: left; }
+    .scores-table .player-cell { min-width: 72px; max-width: 100px; font-weight: 600; color: #fff; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scores-table .pts-cell { min-width: 64px; font-weight: 700; color: #fff; text-align: center; }
+    .scores-table .pts-cell .d { color: rgba(255,255,255,0.6); margin: 0 2px; font-weight: 600; }
+    .main-scoreboard {
+      width: 100%;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: linear-gradient(90deg, #e60000 0%, #0066b1 100%);
+      border-radius: 10px;
+    }
+    .team-name { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .team-totals {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 20px;
+      background: rgba(0,0,0,0.25);
+      padding: 8px 28px;
+      border-radius: 8px;
+      margin: 0 16px;
+    }
+    .team-total-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.05em; }
+    .team-total-value { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  </style>
+</head>
+<body>
+  <div class="scale-root" id="scaleRoot">
+  <div class="wrap">
+    <div class="main-scoreboard">
+      <span class="team-name" id="team1Name">Team 1</span>
+      <div class="team-totals">
+        <div><span class="team-total-value" id="team1Total">0</span></div>
+        <span class="team-total-value" style="font-size: 20px; color: rgba(255,255,255,0.7);">–</span>
+        <div style="text-align: right;"><span class="team-total-value" id="team2Total">0</span></div>
+      </div>
+      <span class="team-name" id="team2Name">Team 2</span>
+    </div>
+    <div class="scores-table">
+      <table>
+        <tr>
+          <th class="row-label">Player</th>
+          <td class="player-cell"><span id="p1name1"></span></td>
+          <td class="player-cell"><span id="p1name2"></span></td>
+          <td class="player-cell"><span id="p1name3"></span></td>
+          <td class="player-cell"><span id="p1name4"></span></td>
+          <td class="player-cell"><span id="p1name5"></span></td>
+        </tr>
+        <tr>
+          <th class="row-label">PTS</th>
+          <td class="pts-cell"><span id="p1pts1"></span><span class="d">–</span><span id="p2pts1"></span></td>
+          <td class="pts-cell"><span id="p1pts2"></span><span class="d">–</span><span id="p2pts2"></span></td>
+          <td class="pts-cell"><span id="p1pts3"></span><span class="d">–</span><span id="p2pts3"></span></td>
+          <td class="pts-cell"><span id="p1pts4"></span><span class="d">–</span><span id="p2pts4"></span></td>
+          <td class="pts-cell"><span id="p1pts5"></span><span class="d">–</span><span id="p2pts5"></span></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  </div>
+  <script>
+    (function() {
+      var DESIGN_W = 1920, DESIGN_H = 1080;
+      function applyScale() {
+        var w = window.innerWidth, h = window.innerHeight;
+        var scaleFit = Math.max(w / DESIGN_W, h / DESIGN_H);
+        var scale = Math.max(1, scaleFit);
+        var el = document.getElementById('scaleRoot');
+        if (el) el.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+      }
+      var root = document.getElementById('scaleRoot');
+      if (root) {
+        root.style.position = 'absolute';
+        root.style.left = '50%';
+        root.style.top = '50%';
+      }
+      applyScale();
+      window.addEventListener('resize', applyScale);
+
+      var params = new URLSearchParams(window.location.search);
+      var room = params.get('room');
+      var dbUrl = params.get('db') ? decodeURIComponent(params.get('db')) : '';
+
+      function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+      function str(v, def) { return (v != null && v !== '') ? String(v) : (def != null ? def : ''); }
+
+      function applyState(data) {
+        var d = data || {};
+        var team1Name = str(d.team1, 'Team 1');
+        var team2Name = str(d.team2, 'Team 2');
+        document.getElementById('team1Name').textContent = team1Name;
+        document.getElementById('team2Name').textContent = team2Name;
+
+        var t1Total = 0, t2Total = 0;
+        for (var i = 1; i <= 5; i++) {
+          var p1n = str(d['p1name' + i], '');
+          var p2n = str(d['p2name' + i], '');
+          var p1sVal = d['p1pts' + i];
+          var p2sVal = d['p2pts' + i];
+          var p1s = p1sVal !== undefined && p1sVal !== null && p1sVal !== '' ? num(p1sVal) : '';
+          var p2s = p2sVal !== undefined && p2sVal !== null && p2sVal !== '' ? num(p2sVal) : '';
+          t1Total += num(p1sVal);
+          t2Total += num(p2sVal);
+          document.getElementById('p1name' + i).textContent = p1n !== '' ? p1n : '–';
+          var p2el = document.getElementById('p2name' + i);
+          if (p2el) p2el.textContent = p2n;
+          document.getElementById('p1pts' + i).textContent = p1s;
+          document.getElementById('p2pts' + i).textContent = p2s;
+        }
+        document.getElementById('team1Total').textContent = t1Total;
+        document.getElementById('team2Total').textContent = t2Total;
+      }
+
+      if (room && dbUrl) {
+        var url = dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(room) + '.json';
+        function poll() {
+          fetch(url).then(function(r) { return r.json(); }).then(applyState).catch(function() {});
+        }
+        poll();
+        setInterval(poll, 2000);
+      } else {
+        var state = { team1: params.get('team1') || 'Team 1', team2: params.get('team2') || 'Team 2' };
+        for (var j = 1; j <= 5; j++) {
+          state['p1name' + j] = params.get('p1name' + j) ? decodeURIComponent(params.get('p1name' + j)) : '';
+          state['p2name' + j] = params.get('p2name' + j) ? decodeURIComponent(params.get('p2name' + j)) : '';
+          state['p1pts' + j] = params.get('p1pts' + j) !== null ? params.get('p1pts' + j) : '';
+          state['p2pts' + j] = params.get('p2pts' + j) !== null ? params.get('p2pts' + j) : '';
+        }
+        applyState(state);
+      }
+    })();
+  </script>
+</body>
+</html>
