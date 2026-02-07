@@ -142,6 +142,7 @@
       <p style="font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-top: 8px;">Overlay refreshes every 2 seconds when live update is on.</p>
     </div>
     <button class="btn btn-primary" id="copyUrl">Copy overlay URL</button>
+    <button class="btn btn-secondary" id="pushNow">Push to Firebase now</button>
     <button class="btn btn-secondary" id="openUrl">Open overlay (preview)</button>
     <div class="url-box" id="urlBox"></div>
   </div>
@@ -179,7 +180,9 @@
       var roomId = document.getElementById('roomId').value.trim();
       if (!dbUrl || !roomId || !document.getElementById('liveMode').checked) return;
       var url = dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(roomId) + '.json';
-      fetch(url, { method: 'PUT', body: JSON.stringify(getState()), headers: { 'Content-Type': 'application/json' } }).catch(function() {});
+      return fetch(url, { method: 'PUT', body: JSON.stringify(getState()), headers: { 'Content-Type': 'application/json' } })
+        .then(function(r) { if (!r.ok) throw new Error('Push failed'); return r; })
+        .catch(function(e) { console.warn('Firebase push failed', e); });
     }
     var pushDebounce;
     function schedulePush() { clearTimeout(pushDebounce); pushDebounce = setTimeout(pushToFirebase, 400); }
@@ -194,6 +197,9 @@
           else document.getElementById('roomId').value = randomRoomId();
           if (d.liveMode) document.getElementById('liveMode').checked = true;
         } else document.getElementById('roomId').value = randomRoomId();
+        if (document.getElementById('liveMode').checked && document.getElementById('firebaseUrl').value.trim() && document.getElementById('roomId').value.trim()) {
+          setTimeout(pushToFirebase, 500);
+        }
       } catch (e) {}
     })();
     function saveLiveSettings() {
@@ -222,6 +228,15 @@
           setTimeout(function() { t.classList.remove('show'); }, 2000);
         });
       } else document.getElementById('urlBox').textContent = 'Copy this URL: ' + url;
+    });
+    document.getElementById('pushNow').addEventListener('click', function() {
+      if (!document.getElementById('liveMode').checked) { alert('Turn on Live update and enter Firebase URL + Room ID first.'); return; }
+      pushToFirebase().then(function() {
+        var t = document.getElementById('toast');
+        t.textContent = 'Pushed to Firebase';
+        t.classList.add('show');
+        setTimeout(function() { t.classList.remove('show'); }, 2000);
+      });
     });
     document.getElementById('openUrl').addEventListener('click', function() { window.open(buildUrl(), '_blank'); });
     updateUrlBox();

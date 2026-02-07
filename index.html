@@ -165,7 +165,10 @@
       if (room && dbUrl) {
         var url = dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(room) + '.json';
         function poll() {
-          fetch(url).then(function(r) { return r.json(); }).then(applyState).catch(function() {});
+          fetch(url)
+            .then(function(r) { if (!r.ok) throw new Error('Fetch ' + r.status); return r.json(); })
+            .then(function(data) { applyState(data != null ? data : {}); })
+            .catch(function(e) { console.warn('Overlay poll failed', e); });
         }
         poll();
         setInterval(poll, 2000);
