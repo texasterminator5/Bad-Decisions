@@ -171,18 +171,63 @@
       return base + '?' + params.toString();
     }
     function updateUrlBox() { document.getElementById('urlBox').textContent = 'Overlay URL: ' + buildUrl(); }
-    function pushToFirebase() {
+    function getRoomUrl() {
       var dbUrl = document.getElementById('firebaseUrl').value.trim();
       var roomId = document.getElementById('roomId').value.trim();
-      if (!dbUrl || !roomId || !document.getElementById('liveMode').checked) return;
-      var url = dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(roomId) + '.json';
+      if (!dbUrl || !roomId) return '';
+      return dbUrl.replace(/\/$/, '') + '/rooms/' + encodeURIComponent(roomId) + '.json';
+    }
+    function pushToFirebase() {
+      if (!document.getElementById('liveMode').checked) return;
+      var url = getRoomUrl();
+      if (!url) return;
       return fetch(url, { method: 'PUT', body: JSON.stringify(getState()), headers: { 'Content-Type': 'application/json' } })
         .then(function(r) { if (!r.ok) throw new Error('Push failed'); return r; })
         .catch(function(e) { console.warn('Firebase push failed', e); });
     }
-    var pushDebounce;
+    function patchFieldToFirebase(id, value) {
+      if (!document.getElementById('liveMode').checked) return;
+      var url = getRoomUrl();
+      if (!url) return;
+      var payload = {};
+      payload[id] = value != null ? value : '';
+      return fetch(url, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+        .then(function(r) { if (!r.ok) throw new Error('Patch failed'); return r; })
+        .catch(function(e) { console.warn('Firebase patch failed', e); });
+    }
+    var pushDebounceById = {};
+    function schedulePushField(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      clearTimeout(pushDebounceById[id]);
+      pushDebounceById[id] = setTimeout(function() { patchFieldToFirebase(id, el.value != null ? el.value.trim() : ''); }, 400);
+    }
     function schedulePush() { clearTimeout(pushDebounce); pushDebounce = setTimeout(pushToFirebase, 400); }
+    var pushDebounce;
     function randomRoomId() { return 'usa-pool-' + Math.random().toString(36).slice(2, 10); }
+    function applyStateToForm(data, skipFocused) {
+      var focused = document.activeElement;
+      ids.forEach(function(id) {
+        if (skipFocused && document.getElementById(id) === focused) return;
+        if (data[id] === undefined) return;
+        var el = document.getElementById(id);
+        if (el) el.value = data[id] != null ? String(data[id]) : '';
+      });
+    }
+    function loadFromFirebase() {
+      var url = getRoomUrl();
+      if (!url || !document.getElementById('liveMode').checked) return;
+      fetch(url).then(function(r) { if (!r.ok) throw new Error('Fetch ' + r.status); return r.json(); })
+        .then(function(data) { applyStateToForm(data != null ? data : {}, false); updateUrlBox(); })
+        .catch(function(e) { console.warn('Firebase load failed', e); });
+    }
+    var syncInterval;
+    function startSync() {
+      clearInterval(syncInterval);
+      if (!document.getElementById('liveMode').checked || !getRoomUrl()) return;
+      syncInterval = setInterval(function() { if (!getRoomUrl()) return; fetch(getRoomUrl()).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) { if (data) applyStateToForm(data, true); }).catch(function() {}); }, 2000);
+    }
+    function stopSync() { clearInterval(syncInterval); syncInterval = null; }
     (function loadSaved() {
       try {
         var s = localStorage.getItem(LIVE_STORAGE);
@@ -193,8 +238,9 @@
           else document.getElementById('roomId').value = randomRoomId();
           if (d.liveMode) document.getElementById('liveMode').checked = true;
         } else document.getElementById('roomId').value = randomRoomId();
-        if (document.getElementById('liveMode').checked && document.getElementById('firebaseUrl').value.trim() && document.getElementById('roomId').value.trim()) {
-          setTimeout(pushToFirebase, 500);
+        if (document.getElementById('liveMode').checked && getRoomUrl()) {
+          loadFromFirebase();
+          startSync();
         }
       } catch (e) {}
     })();
@@ -209,11 +255,14 @@
     }
     ids.forEach(function(id) {
       var el = document.getElementById(id);
-      if (el) { el.addEventListener('input', function() { updateUrlBox(); schedulePush(); }); el.addEventListener('change', function() { updateUrlBox(); schedulePush(); }); }
+      if (el) {
+        el.addEventListener('input', function() { updateUrlBox(); schedulePushField(id); });
+        el.addEventListener('change', function() { updateUrlBox(); schedulePushField(id); });
+      }
     });
-    document.getElementById('firebaseUrl').addEventListener('change', saveLiveSettings);
-    document.getElementById('roomId').addEventListener('change', saveLiveSettings);
-    document.getElementById('liveMode').addEventListener('change', function() { saveLiveSettings(); updateUrlBox(); });
+    document.getElementById('firebaseUrl').addEventListener('change', function() { saveLiveSettings(); if (document.getElementById('liveMode').checked && getRoomUrl()) { loadFromFirebase(); startSync(); } else stopSync(); });
+    document.getElementById('roomId').addEventListener('change', function() { saveLiveSettings(); if (document.getElementById('liveMode').checked && getRoomUrl()) { loadFromFirebase(); startSync(); } else stopSync(); });
+    document.getElementById('liveMode').addEventListener('change', function() { saveLiveSettings(); updateUrlBox(); if (document.getElementById('liveMode').checked && getRoomUrl()) { loadFromFirebase(); startSync(); } else stopSync(); });
     document.getElementById('copyUrl').addEventListener('click', function() {
       var url = buildUrl();
       if (navigator.clipboard && navigator.clipboard.writeText) {
