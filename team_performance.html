@@ -51,6 +51,12 @@
     .match-select-wrap { margin-bottom: 0.75rem; }
     .match-select-wrap label { font-size: 0.85rem; color: var(--muted); margin-right: 0.5rem; }
     .match-select-wrap select { font-size: 0.85rem; max-width: 100%; min-width: 16rem; padding: 0.35rem 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
+    .match-report-label { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem 0; }
+    .match-report-links { max-height: 14rem; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .match-report-links a { display: block; padding: 0.4rem 0; font-size: 0.85rem; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); }
+    .match-report-links a:hover, .match-report-links a:focus { text-decoration: underline; }
+    .match-report-links a:last-child { border-bottom: none; }
+    .match-report-links .match-report-no-link { display: block; padding: 0.4rem 0; font-size: 0.85rem; color: var(--muted); }
     .slicer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
     .slicer-row label { font-size: 0.85rem; color: var(--muted); }
     .slicer-row input[type="date"] { font-size: 0.85rem; padding: 0.35rem 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
@@ -66,12 +72,8 @@
 
     <section>
       <h2>Match report</h2>
-      <div class="match-select-wrap">
-        <label for="history-match-select">Open report:</label>
-        <select id="history-match-select" aria-label="Select match to open FargoRate report">
-          <option value="">— Select a match —</option>
-        </select>
-      </div>
+      <p class="match-report-label">Open FargoRate report:</p>
+      <div class="match-report-links" id="history-match-list" role="list"></div>
     </section>
 
     <section>
@@ -620,16 +622,14 @@
         withIds.push({ date: m.date, match: m.match, matchId: (HISTORY_MATCH_IDS_EXTRA[i] || '') });
       });
       const sorted = withIds.slice().sort((a, b) => a.date.localeCompare(b.date));
-      const options = sorted.map(m => {
+      const listEl = document.getElementById('history-match-list');
+      if (!listEl) return;
+      listEl.innerHTML = sorted.map(m => {
         const label = m.date + ' – ' + m.match;
-        const val = m.matchId ? BASE_MATCH_URL + m.matchId : '';
-        return '<option value="' + (val || '') + '">' + label + '</option>';
+        const url = m.matchId ? BASE_MATCH_URL + m.matchId : '';
+        if (!url) return '<span class="match-report-no-link">' + label + '</span>';
+        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
       }).join('');
-      document.getElementById('history-match-select').innerHTML = '<option value="">— Select a match —</option>' + options;
-      document.getElementById('history-match-select').addEventListener('change', function() {
-        const url = this.value;
-        if (url) { window.open(url, '_blank', 'noopener'); this.value = ''; }
-      });
     }
 
     function render() {
