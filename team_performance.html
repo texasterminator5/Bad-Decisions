@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bad Decisions — Team performance</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --gold: #d4a853;
+    --red: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1rem;
+      min-height: 100vh;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--gold); }
+    .subtitle { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    section h2 { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--accent); }
+    .perf-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
+    .perf-table th, .perf-table td { padding: 0.35rem 0.4rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .perf-table th.nowrap, .perf-table td.nowrap { white-space: nowrap; }
+    .perf-table th { color: var(--muted); font-weight: 600; }
+    .perf-table td.num { text-align: right; }
+    .perf-table .rank { color: var(--gold); font-weight: 600; }
+    .perf-table tr:hover { background: rgba(88, 166, 255, 0.06); }
+    .perf-table .bin-cell { min-width: 4rem; text-align: center; }
+    .perf-table .bin-best { color: var(--green); font-weight: 600; }
+    .perf-table .bin-worst { color: var(--red); font-weight: 600; }
+    .note { font-size: 0.8rem; color: var(--muted); margin-top: 0.75rem; line-height: 1.4; }
+    a { color: var(--accent); }
+    .match-select-wrap { margin-bottom: 0.75rem; }
+    .match-select-wrap label { font-size: 0.85rem; color: var(--muted); margin-right: 0.5rem; }
+    .match-select-wrap select { font-size: 0.85rem; max-width: 100%; min-width: 16rem; padding: 0.35rem 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
+    .slicer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+    .slicer-row label { font-size: 0.85rem; color: var(--muted); }
+    .slicer-row input[type="date"] { font-size: 0.85rem; padding: 0.35rem 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
+    .slicer-row .slicer-hint { font-size: 0.8rem; color: var(--muted); }
+    .slicer-row button { font-size: 0.85rem; padding: 0.35rem 0.6rem; background: var(--border); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; }
+    .slicer-row button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bad Decisions — Historical performance</h1>
+    <p class="subtitle">Per-player stats and breakdown by opponent Fargo. Rank by win % then pts when losing.</p>
+
+    <section>
+      <h2>Match report</h2>
+      <div class="match-select-wrap">
+        <label for="history-match-select">Open report:</label>
+        <select id="history-match-select" aria-label="Select match to open FargoRate report">
+          <option value="">— Select a match —</option>
+        </select>
+      </div>
+    </section>
+
+    <section>
+      <h2>By player (opponent Fargo bins 200–700)</h2>
+      <div class="slicer-row">
+        <span>
+          <label for="date-from">From</label>
+          <input type="date" id="date-from" aria-label="Filter from date">
+        </span>
+        <span>
+          <label for="date-to">To</label>
+          <input type="date" id="date-to" aria-label="Filter to date">
+        </span>
+        <button type="button" id="date-slicer-reset">Reset</button>
+        <span class="slicer-hint" id="date-slicer-hint"></span>
+      </div>
+      <div class="match-select-wrap" style="margin-bottom: 0.75rem;">
+        <label for="bin-size-select">Bin size:</label>
+        <select id="bin-size-select" aria-label="Opponent Fargo bin increment">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="perf-table" id="perf-table">
+          <thead id="perf-head"></thead>
+          <tbody id="perf-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <script>
+    // Inline history (self-contained; no external files needed for GitHub)
+    const BAD_DECISIONS_HISTORY = [
+      { date: '2026-01-12', match: 'Alpha Cue vs Bad Decisions', sets: [
+        { player: 'Stephan', ourRating: 487, race: 51, racks: [6,4,14,14,14], total: 52, won: true, oppRating: 483 },
+        { player: 'Kevin', ourRating: 454, race: 47, racks: [14,14,1,5,14], total: 48, won: true, oppRating: 450 },
+        { player: 'Eric', ourRating: 548, race: 59, racks: [7,4,14,4,14], total: 43, won: false, oppRating: 510 },
+        { player: 'Kat', ourRating: 341, race: 34, racks: [4,6,14,14], total: 38, won: true, oppRating: 384 },
+        { player: 'John', ourRating: 501, race: 55, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 424 }
+      ]},
+      { date: '2026-01-19', match: 'Anger Induced Throw vs Bad Decisions', sets: [
+        { player: 'Kevin', ourRating: 454, race: 49, racks: [14,14,14,14], total: 56, won: true, oppRating: 346 },
+        { player: 'John', ourRating: 501, race: 55, racks: [7,14,14,6,14], total: 55, won: true, oppRating: 400 },
+        { player: 'Richard', ourRating: 560, race: 63, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 352 },
+        { player: 'Daysi', ourRating: 329, race: 33, racks: [14,14,7], total: 35, won: true, oppRating: 314 },
+        { player: 'Stephan', ourRating: 486, race: 53, racks: [14,14,14,14], total: 56, won: true, oppRating: 369 }
+      ]},
+      { date: '2026-01-05', match: 'Bad Decisions vs The Boyz', sets: [
+        { player: 'Eric', ourRating: 548, race: 59, racks: [14,14,3,14,14], total: 59, won: true, oppRating: 519 },
+        { player: 'Daysi', ourRating: 330, race: 32, racks: [14,0,6,1], total: 21, won: false, oppRating: 406 },
+        { player: 'Kevin', ourRating: 457, race: 48, racks: [6,14,6,14,7], total: 47, won: false, oppRating: 438 },
+        { player: 'John', ourRating: 501, race: 53, racks: [6,14,14,14,5], total: 53, won: true, oppRating: 479 },
+        { player: 'Kat', ourRating: 341, race: 34, racks: [14,14,6], total: 34, won: true, oppRating: 325 }
+      ]},
+      { date: '2026-01-26', match: 'Bad Decisions vs The Rack Rangers', sets: [
+        { player: 'Stephan', ourRating: 488, race: 51, racks: [14,14,7,14,5], total: 54, won: true, oppRating: 479 },
+        { player: 'John', ourRating: 501, race: 53, racks: [3,6,0,14], total: 23, won: false, oppRating: 482 },
+        { player: 'Eric', ourRating: 546, race: 52, racks: [14,14,3,14,14], total: 59, won: true, oppRating: 608 },
+        { player: 'Kat', ourRating: 344, race: 35, racks: [14,3,14,3], total: 34, won: false, oppRating: 341 },
+        { player: 'Kevin', ourRating: 454, race: 48, racks: [7,4,0,4], total: 15, won: false, oppRating: 428 }
+      ]},
+      { date: '2026-02-02', match: 'Small Stick Energy vs Bad Decisions', sets: [
+        { player: 'Kevin', ourRating: 455, race: 48, racks: [4,14,14,5,7], total: 44, won: false, oppRating: 440 },
+        { player: 'John', ourRating: 501, race: 54, racks: [14,3,14,0,14,5], total: 50, won: false, oppRating: 472 },
+        { player: 'Kat', ourRating: 343, race: 34, racks: [14,14,5,14], total: 47, won: true, oppRating: 391 },
+        { player: 'Richard', ourRating: 560, race: 60, racks: [14,7,5,0,6], total: 32, won: false, oppRating: 530 }
+      ]},
+      { date: '2026-02-09', match: 'Bad Decisions vs The Renegades', sets: [
+        { player: 'Daysi', ourRating: 327, race: 32, racks: [5,5,5,0], total: 15, won: false, oppRating: 427 },
+        { player: 'John', ourRating: 502, race: 54, racks: [14,14,14,14], total: 56, won: true, oppRating: 457 },
+        { player: 'Eric', ourRating: 546, race: 61, racks: [7,7,14,14,14], total: 56, won: false, oppRating: 458 },
+        { player: 'Stephan', ourRating: 489, race: 50, racks: [14,2,2,14,6], total: 38, won: false, oppRating: 500 }
+      ]}
+    ];
+    const BAD_DECISIONS_HISTORY_EXTRA = [
+      { date: '2025-01-06', match: 'Bad Decisions vs The Boyz', sets: [
+        { player: 'John', ourRating: 469, race: 48, racks: [6,14,14,14], total: 48, won: true, oppRating: 479 },
+        { player: 'Kat', ourRating: 288, race: 28, racks: [3,1,6], total: 10, won: false, oppRating: 384 },
+        { player: 'Kevin', ourRating: 422, race: 44, racks: [14,14,14,14], total: 56, won: true, oppRating: 384 },
+        { player: 'Eric', ourRating: 538, race: 57, racks: [14,2,4,14,6], total: 40, won: false, oppRating: 528 },
+        { player: 'Stephan', ourRating: 478, race: 52, racks: [6,7,14,14,7], total: 48, won: false, oppRating: 384 }
+      ]},
+      { date: '2025-01-13', match: 'Accidental Defense vs Bad Decisions', sets: [
+        { player: 'Daysi', ourRating: 329, race: 31, racks: [4,14,1,5], total: 24, won: false, oppRating: 452 },
+        { player: 'Richard', ourRating: 560, race: 62, racks: [14,4,14,14,14,14], total: 74, won: true, oppRating: 506 },
+        { player: 'John', ourRating: 471, race: 48, racks: [14,14,14,14], total: 56, won: true, oppRating: 501 },
+        { player: 'Eric', ourRating: 537, race: 60, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 398 }
+      ]},
+      { date: '2025-01-20', match: '#JTT vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 472, race: 47, racks: [14,14,14,14], total: 56, won: true, oppRating: 520 },
+        { player: 'Richard', ourRating: 562, race: 61, racks: [7,7,14,14,7], total: 49, won: false, oppRating: 527 },
+        { player: 'Kat', ourRating: 302, race: 29, racks: [14,7,7,7], total: 35, won: true, oppRating: 403 },
+        { player: 'Stephan', ourRating: 475, race: 50, racks: [14,6,7,4,14], total: 45, won: false, oppRating: 469 },
+        { player: 'Kevin', ourRating: 424, race: 43, racks: [14,14,7,14], total: 49, won: true, oppRating: 448 }
+      ]},
+      { date: '2025-01-27', match: 'Bad Decisions vs Balls In Hand', sets: [
+        { player: 'John', ourRating: 474, race: 50, racks: [14,7,5,14,6], total: 46, won: false, oppRating: 447 },
+        { player: 'Daysi', ourRating: 326, race: 32, racks: [14,14,14], total: 42, won: true, oppRating: 324 },
+        { player: 'Eric', ourRating: 539, race: 60, racks: [14,6,6,5], total: 31, won: false, oppRating: 461 },
+        { player: 'Kevin', ourRating: 428, race: 45, racks: [14,14,5,14], total: 47, won: true, oppRating: 321 },
+        { player: 'Richard', ourRating: 562, race: 64, racks: [14,14,14,14,4,6], total: 66, won: false, oppRating: 402 }
+      ]},
+      { date: '2025-02-03', match: 'Chalk Dirty to Me vs Bad Decisions', sets: [
+        { player: 'Eric', ourRating: 538, race: 60, racks: [4,14,14,14,6,3], total: 55, won: false, oppRating: 462 },
+        { player: 'Daysi', ourRating: 333, race: 33, racks: [6,6,6], total: 18, won: false, oppRating: 308 },
+        { player: 'Stephan', ourRating: 474, race: 45, racks: [7,7,14,7,0], total: 35, won: false, oppRating: 546 },
+        { player: 'Kevin', ourRating: 429, race: 45, racks: [6,14,5,14,14], total: 53, won: true, oppRating: 423 }
+      ]},
+      { date: '2025-02-10', match: 'Bad Decisions vs Texas SkillBillies', sets: [
+        { player: 'Kat', ourRating: 301, race: 30, racks: [7,14,3,7], total: 31, won: false, oppRating: 354 },
+        { player: 'Stephan', ourRating: 473, race: 49, racks: [14,14,14,14], total: 56, won: true, oppRating: 485 },
+        { player: 'Eric', ourRating: 537, race: 58, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 305 },
+        { player: 'Richard', ourRating: 559, race: 64, racks: [14,4,14,7,14,14], total: 67, won: true, oppRating: 400 }
+      ]},
+      { date: '2025-02-17', match: 'The Rack Rangers vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 475, race: 50, racks: [6,14,14,1,3], total: 38, won: false, oppRating: 463 },
+        { player: 'Stephan', ourRating: 474, race: 48, racks: [4,14,0,7,5], total: 30, won: false, oppRating: 508 },
+        { player: 'Kat', ourRating: 302, race: 30, racks: [6,14,0], total: 20, won: false, oppRating: 316 },
+        { player: 'Eric', ourRating: 538, race: 51, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 604 }
+      ]},
+      { date: '2025-02-24', match: 'Bad Decisions vs Anger Induced Throw', sets: [
+        { player: 'Daysi', ourRating: 334, race: 33, racks: [6,6,14,3], total: 29, won: false, oppRating: 368 },
+        { player: 'Stephan', ourRating: 475, race: 51, racks: [14,6,14,14], total: 48, won: false, oppRating: 333 },
+        { player: 'Kevin', ourRating: 439, race: 45, racks: [7,6,14,14,14], total: 55, won: true, oppRating: 453 },
+        { player: 'Kat', ourRating: 294, race: 29, racks: [14,5,14], total: 33, won: true, oppRating: 337 }
+      ]},
+      { date: '2025-03-03', match: 'Bad News Cues vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 477, race: 51, racks: [14,14,14,14], total: 56, won: true, oppRating: 448 },
+        { player: 'Kat', ourRating: 298, race: 29, racks: [6,6,14,4], total: 30, won: false, oppRating: 374 },
+        { player: 'Richard', ourRating: 557, race: 63, racks: [6,14,14,14,14,14], total: 76, won: true, oppRating: 453 },
+        { player: 'Kevin', ourRating: 430, race: 45, racks: [6,14,14,14], total: 48, won: true, oppRating: 345 },
+        { player: 'Stephan', ourRating: 474, race: 51, racks: [14,14,14,14], total: 56, won: true, oppRating: 357 }
+      ]},
+      { date: '2025-03-10', match: 'Bad Decisions vs The Outlaws', sets: [
+        { player: 'Richard', ourRating: 559, race: 62, racks: [14,14,14,14,4,6], total: 66, won: false, oppRating: 501 },
+        { player: 'Kat', ourRating: 294, race: 28, racks: [14,14], total: 28, won: true, oppRating: 270 },
+        { player: 'Stephan', ourRating: 475, race: 52, racks: [14,14,14,5,14], total: 61, won: true, oppRating: 363 },
+        { player: 'Daysi', ourRating: 325, race: 32, racks: [14,14,2,14], total: 44, won: true, oppRating: 270 }
+      ]},
+      { date: '2025-03-17', match: 'Cool Arrows vs Bad Decisions', sets: [
+        { player: 'Kat', ourRating: 305, race: 29, racks: [14,14,14], total: 42, won: true, oppRating: 275 },
+        { player: 'Eric', ourRating: 543, race: 56, racks: [5,14,2,5,14,14,14], total: 68, won: true, oppRating: 556 },
+        { player: 'Daysi', ourRating: 325, race: 32, racks: [14,14,14], total: 42, won: true, oppRating: 293 },
+        { player: 'John', ourRating: 480, race: 44, racks: [14,6,7,14,14], total: 55, won: true, oppRating: 581 }
+      ]},
+      { date: '2025-03-24', match: 'The Boyz vs Bad Decisions', sets: [
+        { player: 'Kevin', ourRating: 445, race: 47, racks: [7,14,14,5,3], total: 43, won: false, oppRating: 412 },
+        { player: 'Richard', ourRating: 561, race: 63, racks: [14,14,14,5,1,14,5], total: 67, won: false, oppRating: 489 },
+        { player: 'Daysi', ourRating: 328, race: 31, racks: [3,14,7,6,7], total: 37, won: false, oppRating: 474 },
+        { player: 'Eric', ourRating: 544, race: 58, racks: [4,14,4,14,14,14], total: 64, won: true, oppRating: 528 }
+      ]},
+      { date: '2025-03-31', match: 'Bad Decisions vs Accidental Defense', sets: [
+        { player: 'Daysi', ourRating: 333, race: 33, racks: [14,6,14], total: 34, won: true, oppRating: 402 },
+        { player: 'Stephan', ourRating: 478, race: 51, racks: [14,6,1,14,7], total: 42, won: false, oppRating: 433 },
+        { player: 'Kevin', ourRating: 442, race: 46, racks: [7,7,7,14], total: 35, won: false, oppRating: 453 },
+        { player: 'John', ourRating: 481, race: 52, racks: [14,14,14,14], total: 56, won: true, oppRating: 404 },
+        { player: 'Richard', ourRating: 561, race: 62, racks: [5,14,14,5,14,14], total: 66, won: true, oppRating: 502 }
+      ]},
+      { date: '2025-04-07', match: 'Bad Decisions vs #JTT', sets: [
+        { player: 'John', ourRating: 482, race: 50, racks: [5,1,14,14,14,14], total: 62, won: true, oppRating: 478 },
+        { player: 'Stephan', ourRating: 477, race: 48, racks: [14,0,14,14,3,1], total: 46, won: false, oppRating: 505 },
+        { player: 'Eric', ourRating: 550, race: 60, racks: [14,4,3,14,14,5], total: 54, won: false, oppRating: 498 },
+        { player: 'Kevin', ourRating: 439, race: 46, racks: [14,14,14,14], total: 56, won: true, oppRating: 413 },
+        { player: 'Kat', ourRating: 314, race: 31, racks: [14,6,14], total: 34, won: true, oppRating: 412 }
+      ]},
+      { date: '2025-04-28', match: 'Small Stick Energy vs Bad Decisions', sets: [
+        { player: 'Daysi', ourRating: 335, race: 33, racks: [14,0,7,7], total: 28, won: false, oppRating: 400 },
+        { player: 'Stephan', ourRating: 478, race: 50, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 475 },
+        { player: 'Kevin', ourRating: 442, race: 46, racks: [6,14,14,14], total: 48, won: true, oppRating: 450 },
+        { player: 'Eric', ourRating: 550, race: 59, racks: [14,3,2,5,4], total: 28, won: false, oppRating: 523 }
+      ]},
+      { date: '2025-05-05', match: 'Bad Decisions vs The Rack Rangers', sets: [
+        { player: 'Daysi', ourRating: 330, race: 33, racks: [6,6,14], total: 26, won: false, oppRating: 311 },
+        { player: 'Stephan', ourRating: 479, race: 50, racks: [4,14,14,4,3], total: 39, won: false, oppRating: 471 },
+        { player: 'John', ourRating: 483, race: 51, racks: [14,14,14,1,0,14], total: 57, won: true, oppRating: 474 },
+        { player: 'Eric', ourRating: 547, race: 58, racks: [6,14,14,5,3], total: 42, won: false, oppRating: 527 },
+        { player: 'Richard', ourRating: 553, race: 60, racks: [14,14,4,14,5,5], total: 56, won: false, oppRating: 510 }
+      ]},
+      { date: '2025-05-12', match: 'Alpha Cue vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 486, race: 51, racks: [6,6,14,14,5], total: 45, won: false, oppRating: 471 },
+        { player: 'Kevin', ourRating: 445, race: 46, racks: [4,14,14,14], total: 46, won: true, oppRating: 452 },
+        { player: 'Stephan', ourRating: 478, race: 49, racks: [7,14,14,3,6,14], total: 58, won: true, oppRating: 502 },
+        { player: 'Kat', ourRating: 314, race: 28, racks: [5,14,3,5,14], total: 41, won: true, oppRating: 508 }
+      ]},
+      { date: '2025-05-19', match: 'Bad Decisions vs #JTT', sets: [
+        { player: 'Daysi', ourRating: 325, race: 32, racks: [14,6,7,14], total: 41, won: true, oppRating: 404 },
+        { player: 'Stephan', ourRating: 478, race: 48, racks: [2,14,7,0,1], total: 24, won: false, oppRating: 516 },
+        { player: 'John', ourRating: 487, race: 53, racks: [14,14,14,14], total: 56, won: true, oppRating: 403 },
+        { player: 'Kat', ourRating: 315, race: 31, racks: [6,14,14], total: 34, won: true, oppRating: 398 },
+        { player: 'Eric', ourRating: 547, race: 60, racks: [14,14,4,14,3], total: 63, won: true, oppRating: 485 }
+      ]},
+      { date: '2025-05-26', match: 'Bad Decisions vs Chalk Dirty to Me', sets: [
+        { player: 'Daysi', ourRating: 329, race: 32, racks: [7,14,14], total: 35, won: true, oppRating: 435 },
+        { player: 'Eric', ourRating: 546, race: 62, racks: [14,6,14,6,14], total: 54, won: false, oppRating: 424 },
+        { player: 'Stephan', ourRating: 477, race: 50, racks: [6,14,1,14,2], total: 37, won: false, oppRating: 469 },
+        { player: 'John', ourRating: 489, race: 53, racks: [14,14,14,14], total: 56, won: true, oppRating: 313 },
+        { player: 'Kevin', ourRating: 447, race: 47, racks: [14,14,6,14], total: 48, won: true, oppRating: 424 }
+      ]},
+      { date: '2025-06-02', match: 'Rare Breed vs Bad Decisions', sets: [
+        { player: 'Daysi', ourRating: 330, race: 33, racks: [6,5,7], total: 18, won: false, oppRating: 305 },
+        { player: 'Stephan', ourRating: 477, race: 52, racks: [6,6,14,14,14], total: 54, won: true, oppRating: 387 },
+        { player: 'Richard', ourRating: 558, race: 63, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 588 },
+        { player: 'Kevin', ourRating: 446, race: 39, racks: [14,5,4,14,1,14], total: 52, won: true, oppRating: 588 }
+      ]},
+      { date: '2025-06-09', match: 'Bad Decisions vs The Boyz', sets: [
+        { player: 'Kat', ourRating: 322, race: 32, racks: [14,4,14], total: 32, won: true, oppRating: 400 },
+        { player: 'John', ourRating: 491, race: 51, racks: [7,14,7,14,14], total: 56, won: true, oppRating: 498 },
+        { player: 'Richard', ourRating: 559, race: 60, racks: [14,7,6,14,14,2], total: 57, won: false, oppRating: 530 },
+        { player: 'Kevin', ourRating: 450, race: 45, racks: [6,1,14,1,6], total: 28, won: false, oppRating: 487 }
+      ]},
+      { date: '2025-06-16', match: 'Accidental Defense vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 490, race: 53, racks: [4,14,14,14,6,14], total: 66, won: true, oppRating: 454 },
+        { player: 'Stephan', ourRating: 476, race: 50, racks: [14,14,14,14], total: 56, won: true, oppRating: 294 },
+        { player: 'Kevin', ourRating: 451, race: 48, racks: [14,14,14,4,3], total: 49, won: false, oppRating: 407 },
+        { player: 'Richard', ourRating: 558, race: 61, racks: [3,0,14,14,14,14], total: 59, won: false, oppRating: 507 }
+      ]},
+      { date: '2025-06-23', match: 'Bad Decisions vs Anger Induced Throw', sets: [
+        { player: 'Kat', ourRating: 328, race: 32, racks: [14,14,14], total: 42, won: true, oppRating: 400 },
+        { player: 'Kevin', ourRating: 451, race: 48, racks: [14,14,7,14], total: 49, won: true, oppRating: 336 },
+        { player: 'Stephan', ourRating: 476, race: 51, racks: [14,7,14,7,14], total: 56, won: true, oppRating: 450 },
+        { player: 'Richard', ourRating: 558, race: 64, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 400 },
+        { player: 'John', ourRating: 490, race: 53, racks: [14,14,14,14], total: 56, won: true, oppRating: 429 }
+      ]},
+      { date: '2025-06-30', match: 'Balls In Hand vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 489, race: 52, racks: [5,14,4,14,14,14], total: 65, won: true, oppRating: 463 },
+        { player: 'Kevin', ourRating: 450, race: 48, racks: [14,6,14,14], total: 48, won: true, oppRating: 406 },
+        { player: 'Stephan', ourRating: 478, race: 50, racks: [7,14,14,0,14,5], total: 54, won: false, oppRating: 465 },
+        { player: 'Kat', ourRating: 329, race: 33, racks: [2,14,14], total: 30, won: false, oppRating: 232 },
+        { player: 'Daysi', ourRating: 315, race: 31, racks: [7,14,14], total: 35, won: true, oppRating: 324 }
+      ]},
+      { date: '2025-07-07', match: 'Bad Decisions vs Cool Arrows', sets: [
+        { player: 'Daysi', ourRating: 320, race: 31, racks: [7,7], total: 14, won: false, oppRating: 278 },
+        { player: 'Kevin', ourRating: 455, race: 49, racks: [14,2,3,6], total: 25, won: false, oppRating: 374 },
+        { player: 'Eric', ourRating: 546, race: 57, racks: [6,0,6,5,5,14], total: 50, won: false, oppRating: 546 },
+        { player: 'Stephan', ourRating: 479, race: 51, racks: [14,3,2,14,14], total: 47, won: false, oppRating: 448 }
+      ]},
+      { date: '2025-07-14', match: 'Bad Decisions vs Small Stick Energy', sets: [
+        { player: 'John', ourRating: 488, race: 52, racks: [7,4,14,14,14], total: 53, won: true, oppRating: 452 },
+        { player: 'Kat', ourRating: 327, race: 32, racks: [6,6,14,14], total: 40, won: true, oppRating: 430 },
+        { player: 'Kevin', ourRating: 454, race: 49, racks: [14,14,14,6,14], total: 62, won: true, oppRating: 391 },
+        { player: 'Stephan', ourRating: 478, race: 51, racks: [14,14,14,14], total: 56, won: true, oppRating: 319 },
+        { player: 'Eric', ourRating: 545, race: 60, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 324 }
+      ]},
+      { date: '2025-07-21', match: 'The Rack Rangers vs Bad Decisions', sets: [
+        { player: 'Kat', ourRating: 329, race: 33, racks: [14,7,3], total: 24, won: false, oppRating: 309 },
+        { player: 'Eric', ourRating: 544, race: 52, racks: [14,14,5,0,14,0,2], total: 49, won: false, oppRating: 605 },
+        { player: 'Kevin', ourRating: 456, race: 43, racks: [14,0,6,5,6], total: 31, won: false, oppRating: 546 },
+        { player: 'Stephan', ourRating: 479, race: 48, racks: [14,7,5,6,14,14], total: 60, won: true, oppRating: 518 }
+      ]},
+      { date: '2025-07-28', match: 'Bad Decisions vs Alpha Cue', sets: [
+        { player: 'Kat', ourRating: 328, race: 32, racks: [14,1,4,5], total: 24, won: false, oppRating: 397 },
+        { player: 'John', ourRating: 488, race: 51, racks: [14,0,5,14,1], total: 34, won: false, oppRating: 486 },
+        { player: 'Eric', ourRating: 545, race: 59, racks: [5,14,14,5,7], total: 45, won: false, oppRating: 515 },
+        { player: 'Richard', ourRating: 559, race: 60, racks: [5,14,6,14,4], total: 43, won: false, oppRating: 528 }
+      ]},
+      { date: '2025-08-04', match: '#JTT vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 488, race: 53, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 400 },
+        { player: 'Stephan', ourRating: 480, race: 50, racks: [5,14,14,6,14], total: 53, won: true, oppRating: 471 },
+        { player: 'Eric', ourRating: 546, race: 58, racks: [0,14,14,14,14,14], total: 70, won: true, oppRating: 526 },
+        { player: 'Kat', ourRating: 327, race: 32, racks: [7,14,14], total: 35, won: true, oppRating: 382 },
+        { player: 'Kevin', ourRating: 455, race: 49, racks: [14,14,7,14], total: 49, won: true, oppRating: 396 }
+      ]},
+      { date: '2025-08-25', match: 'Bad Decisions vs Alpha Cue', sets: [
+        { player: 'Kat', ourRating: 331, race: 33, racks: [5,14,5,14], total: 38, won: true, oppRating: 382 },
+        { player: 'Eric', ourRating: 548, race: 60, racks: [6,14,6,14,14,14], total: 68, won: true, oppRating: 489 },
+        { player: 'Kevin', ourRating: 459, race: 48, racks: [14,6,14,14], total: 48, won: true, oppRating: 450 },
+        { player: 'John', ourRating: 489, race: 49, racks: [7,14,14,7,14], total: 56, won: true, oppRating: 522 },
+        { player: 'Stephan', ourRating: 481, race: 48, racks: [14,14,6,14], total: 48, won: true, oppRating: 517 }
+      ]},
+      { date: '2025-09-01', match: '#JTT vs Bad Decisions', sets: [
+        { player: 'Richard', ourRating: 559, race: 61, racks: [0,14,14,1,14,7], total: 64, won: true, oppRating: 521 },
+        { player: 'Kat', ourRating: 332, race: 33, racks: [14,14,5], total: 33, won: true, oppRating: 398 },
+        { player: 'Kevin', ourRating: 458, race: 47, racks: [5,7,3,7,0], total: 31, won: false, oppRating: 486 },
+        { player: 'Stephan', ourRating: 481, race: 50, racks: [6,14,14,7], total: 55, won: true, oppRating: 464 }
+      ]},
+      { date: '2025-09-08', match: 'Bad Decisions vs The Rack Rangers', sets: [
+        { player: 'Kat', ourRating: 333, race: 33, racks: [14,14,3,14], total: 45, won: true, oppRating: 311 },
+        { player: 'Stephan', ourRating: 483, race: 51, racks: [5,14,14,6,14], total: 53, won: true, oppRating: 473 },
+        { player: 'John', ourRating: 490, race: 49, racks: [14,14,7,14], total: 49, won: true, oppRating: 523 },
+        { player: 'Eric', ourRating: 548, race: 53, racks: [0,0,0,1,4,0], total: 19, won: false, oppRating: 605 },
+        { player: 'Kevin', ourRating: 457, race: 47, racks: [14,14,14,5], total: 47, won: true, oppRating: 473 }
+      ]},
+      { date: '2025-09-15', match: 'The Renegades vs Bad Decisions', sets: [
+        { player: 'Kat', ourRating: 334, race: 33, racks: [14,14,14], total: 42, won: true, oppRating: 306 },
+        { player: 'Richard', ourRating: 559, race: 62, racks: [14,14,5,7,4], total: 44, won: false, oppRating: 497 },
+        { player: 'John', ourRating: 490, race: 52, racks: [5,6,14,14,14], total: 53, won: true, oppRating: 472 },
+        { player: 'Stephan', ourRating: 483, race: 50, racks: [14,5,14,7,14], total: 54, won: true, oppRating: 495 }
+      ]},
+      { date: '2025-09-29', match: 'Cool Arrows vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 492, race: 53, racks: [14,5,14,14,14], total: 61, won: true, oppRating: 447 },
+        { player: 'Daysi', ourRating: 320, race: 31, racks: [6,14,14], total: 34, won: true, oppRating: 278 },
+        { player: 'Kat', ourRating: 336, race: 33, racks: [14,6,14], total: 34, won: true, oppRating: 296 },
+        { player: 'Eric', ourRating: 545, race: 58, racks: [0,0,14,14,6], total: 62, won: true, oppRating: 527 }
+      ]},
+      { date: '2025-10-06', match: 'Bad Decisions vs The Boyz', sets: [
+        { player: 'Kat', ourRating: 336, race: 33, racks: [6,5,7,7], total: 25, won: false, oppRating: 419 },
+        { player: 'Kevin', ourRating: 456, race: 48, racks: [14,14,7,14], total: 49, won: true, oppRating: 435 },
+        { player: 'Eric', ourRating: 545, race: 59, racks: [7,14,14,5,14,14], total: 68, won: true, oppRating: 517 },
+        { player: 'John', ourRating: 493, race: 52, racks: [14,3,4,14,4], total: 39, won: false, oppRating: 471 },
+        { player: 'Stephan', ourRating: 484, race: 48, racks: [7,5,6,7,7], total: 32, won: false, oppRating: 532 }
+      ]},
+      { date: '2025-10-13', match: 'Bad Decisions vs Anger Induced Throw', sets: [
+        { player: 'Daysi', ourRating: 319, race: 32, racks: [14,7,5,14], total: 40, won: true, oppRating: 355 },
+        { player: 'Stephan', ourRating: 483, race: 53, racks: [14,14,6,14,14], total: 62, won: true, oppRating: 407 },
+        { player: 'John', ourRating: 494, race: 54, racks: [14,14,14,14], total: 56, won: true, oppRating: 399 },
+        { player: 'Kevin', ourRating: 459, race: 48, racks: [14,14,3,7,3], total: 41, won: false, oppRating: 453 },
+        { player: 'Eric', ourRating: 545, race: 61, racks: [14,14,14,14,14], total: 70, won: true, oppRating: 340 }
+      ]},
+      { date: '2025-10-20', match: 'Chalk Dirty to Me vs Bad Decisions', sets: [
+        { player: 'Kat', ourRating: 336, race: 32, racks: [14,6,14], total: 34, won: true, oppRating: 256 },
+        { player: 'Stephan', ourRating: 485, race: 53, racks: [14,7,14,6,14], total: 55, won: true, oppRating: 425 },
+        { player: 'John', ourRating: 495, race: 53, racks: [14,14,14,14], total: 56, won: true, oppRating: 456 },
+        { player: 'Kevin', ourRating: 459, race: 49, racks: [5,14,14,6], total: 39, won: false, oppRating: 367 }
+      ]},
+      { date: '2025-11-03', match: 'Accidental Defense vs Bad Decisions', sets: [
+        { player: 'Kevin', ourRating: 457, race: 49, racks: [14,14,14,14], total: 56, won: true, oppRating: 397 },
+        { player: 'Richard', ourRating: 560, race: 64, racks: [14,14,14,14,5,14], total: 75, won: true, oppRating: 416 },
+        { player: 'Daysi', ourRating: 320, race: 31, racks: [14,4,14], total: 32, won: true, oppRating: 278 },
+        { player: 'John', ourRating: 495, race: 54, racks: [14,14,7,14,14], total: 63, won: true, oppRating: 410 }
+      ]},
+      { date: '2025-11-10', match: 'Balls In Hand vs Bad Decisions', sets: [
+        { player: 'Richard', ourRating: 560, race: 63, racks: [14,6,7,14,14,14], total: 69, won: true, oppRating: 475 },
+        { player: 'Daysi', ourRating: 318, race: 32, racks: [14,14,14], total: 42, won: true, oppRating: 326 },
+        { player: 'Kevin', ourRating: 459, race: 49, racks: [3,6,4], total: 13, won: false, oppRating: 343 },
+        { player: 'John', ourRating: 494, race: 53, racks: [14,14,6,6,14], total: 54, won: true, oppRating: 454 },
+        { player: 'Kat', ourRating: 337, race: 33, racks: [7,3,14,7], total: 31, won: false, oppRating: 410 }
+      ]},
+      { date: '2025-11-17', match: 'Rare Breed vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 496, race: 55, racks: [14,6,5,6], total: 31, won: false, oppRating: 385 },
+        { player: 'Daysi', ourRating: 325, race: 32, racks: [14,14,14], total: 42, won: true, oppRating: 337 },
+        { player: 'Stephan', ourRating: 484, race: 52, racks: [0,14,7,14,14], total: 63, won: true, oppRating: 443 },
+        { player: 'Eric', ourRating: 547, race: 61, racks: [14,14,14,14,7], total: 63, won: true, oppRating: 335 },
+        { player: 'Kat', ourRating: 336, race: 34, racks: [7,14,14], total: 35, won: true, oppRating: 310 }
+      ]},
+      { date: '2025-11-24', match: 'Bad Decisions vs Small Stick Energy', sets: [
+        { player: 'John', ourRating: 497, race: 54, racks: [14,14,6,14,14], total: 62, won: true, oppRating: 454 },
+        { player: 'Daysi', ourRating: 329, race: 33, racks: [2,6,6], total: 14, won: false, oppRating: 389 },
+        { player: 'Kevin', ourRating: 455, race: 47, racks: [6,14,14,7,14], total: 55, won: true, oppRating: 465 },
+        { player: 'Kat', ourRating: 338, race: 33, racks: [14,14,14], total: 42, won: true, oppRating: 273 },
+        { player: 'Richard', ourRating: 560, race: 60, racks: [14,1,14,14,3,5], total: 51, won: false, oppRating: 538 }
+      ]},
+      { date: '2025-12-01', match: 'Balls In Hand vs Bad Decisions', sets: [
+        { player: 'John', ourRating: 497, race: 53, racks: [14,6,4,5], total: 29, won: false, oppRating: 472 },
+        { player: 'Kevin', ourRating: 457, race: 48, racks: [14,14,14,2,6], total: 50, won: true, oppRating: 455 },
+        { player: 'Stephan', ourRating: 486, race: 51, racks: [0,3,7,14,7], total: 31, won: false, oppRating: 468 },
+        { player: 'Eric', ourRating: 547, race: 62, racks: [7,14,14,14,14], total: 63, won: true, oppRating: 411 },
+        { player: 'Kat', ourRating: 339, race: 34, racks: [6,14,14], total: 34, won: true, oppRating: 352 }
+      ]}
+    ];
+    const BAD_DECISIONS_HISTORY_ALL = BAD_DECISIONS_HISTORY.concat(BAD_DECISIONS_HISTORY_EXTRA);
+
+    const HISTORY_MATCH_IDS_ORIGINAL_ORDER = [
+      '04012b7a-5302-4954-8587-b3c90179a608', '15d58da2-53ca-4359-8cbe-b3c90179a608', 'e61722ef-137a-4e43-810f-b3c90179a608',
+      '74fe15c5-260e-4144-a4a5-b3c90179a608', '67277ef5-c9a5-499b-9894-b3c90179a608', '66a884ce-1240-4d11-9adb-b3c90179a608'
+    ];
+    const HISTORY_MATCH_IDS_EXTRA = [
+      '98f679d1-a746-4580-9843-b259015b4d83', 'cd3ef78b-96dd-484a-b009-b259015b4d83', '0676b07c-b525-40f6-8c70-b259015b4d87', 'f233a0ec-e15e-4f94-8e1e-b259015b4d8c', '4d9f6527-4003-4d8b-adbb-b259015b4d8c',
+      '6ded685b-7d7d-4964-85db-b259015b4d91', '8d00a92b-0d5a-4ede-81da-b259015b4d95', 'ddac0bcd-cf68-4a01-9c2c-b259015b4d9a', '22029d8f-3726-414b-84bf-b259015b4d9a', '31dce529-48b4-4e59-940b-b259015b4d9f',
+      '8106f705-5c90-4e05-8f80-b259015b4da3', '7b72cb74-a094-41cf-a1d6-b259015b4da8', '68c75694-9b42-4517-a832-b259015b4dad', '1e48a30c-97ab-49a0-90b3-b259015b4dad', '8e36867e-758c-46fb-b927-b2cc0025b062',
+      '65ae3ee8-d8cc-4e65-ad6e-b2cc0025b062', '5d1088a4-dc6d-480f-be4f-b2cc0025b067', '80415855-2e32-4476-baed-b2cc0025b067', '5a3c9d5c-19cf-4497-a051-b2cc0025b06b', '72fdd3dd-be10-4c98-9d26-b2cc0025b070',
+      'c0744fce-ac50-40c5-b80d-b2cc0025b075', 'd39e5bae-40a5-43d1-b7fd-b2cc0025b075', 'd1bed7f1-a0ae-41c4-ac08-b2cc0025b079', '342a7b41-ea6d-4ce0-8262-b2cc0025b07e', 'c83fcb58-4412-4096-a236-b2cc0025b083',
+      '0bdd6643-23e7-42bd-8976-b2cc0025b088', '5df93162-7668-4580-a963-b2cc0025b088', '16f46a6f-64e3-4ba9-b305-b2cc0025b08c', '89cac465-265a-4615-8c97-b2cc0025b091', 'fdc27fb9-3a5b-4737-a8fb-b3410096b05c',
+      '000316bc-3e84-4946-a55f-b3410096b061', 'ac0b589e-3b93-4e2f-862b-b3410096b066', '50983b24-fe69-4922-bf0d-b3410096b066', '37139f5b-4754-4267-b26e-b3410096b06a', 'fe375829-5baa-42e4-80c6-b3410096b06a',
+      'a70b3369-9551-4460-a17e-b3410096b06f', '03aa0a4c-aa7d-4ae1-a854-b3410096b06f', '3aa25f05-daee-4b3d-ad1b-b3410096b078', '205b73f2-5103-4e24-98ab-b3410096b07d', '6a086b44-5b6f-4573-abba-b3410096b082',
+      '9dcce0db-98f3-4c66-9902-b3410096b087', 'ad827766-e26c-48c9-8cde-b3410096b08b'
+    ];
+    const BASE_MATCH_URL = 'https://lms.fargorate.com/PublicReport/MatchResultUSAPL?matchId=';
+
+    // Opponent Fargo bins from 200 to 700. Bin size chosen by dropdown (10, 25, 50, 100).
+    const OPP_BIN_MIN = 200;
+    const OPP_BIN_MAX = 700;
+    let binSize = 50;
+
+    function getDateRange() {
+      const dates = BAD_DECISIONS_HISTORY_ALL.map(m => m.date);
+      if (dates.length === 0) return { min: '', max: '' };
+      return { min: dates.reduce((a, b) => a <= b ? a : b), max: dates.reduce((a, b) => a >= b ? a : b) };
+    }
+
+    function getFilteredHistory() {
+      const fromEl = document.getElementById('date-from');
+      const toEl = document.getElementById('date-to');
+      const from = (fromEl && fromEl.value) || '';
+      const to = (toEl && toEl.value) || '';
+      if (!from && !to) return BAD_DECISIONS_HISTORY_ALL;
+      return BAD_DECISIONS_HISTORY_ALL.filter(m => {
+        if (from && m.date < from) return false;
+        if (to && m.date > to) return false;
+        return true;
+      });
+    }
+
+    function getBins(size) {
+      const arr = [];
+      for (let b = OPP_BIN_MIN; b < OPP_BIN_MAX; b += size) arr.push(b + '-' + (b + size));
+      return arr;
+    }
+
+    function getOppFargoBin(oppFargo) {
+      const f = Math.floor(oppFargo);
+      const left = Math.floor(f / binSize) * binSize;
+      const leftClamped = Math.max(OPP_BIN_MIN, Math.min(OPP_BIN_MAX - binSize, left));
+      return leftClamped + '-' + (leftClamped + binSize);
+    }
+
+    function getHistoricalByPlayerAndOppBin() {
+      const history = getFilteredHistory();
+      const byPlayerAndBin = {};
+      for (const m of history) {
+        for (const s of m.sets) {
+          const bin = getOppFargoBin(s.oppRating);
+          if (!byPlayerAndBin[s.player]) byPlayerAndBin[s.player] = {};
+          if (!byPlayerAndBin[s.player][bin]) byPlayerAndBin[s.player][bin] = { wins: 0, total: 0, losingPts: [], deficitsWhenLose: [], ourTotals: [], oppTotals: [] };
+          byPlayerAndBin[s.player][bin].total++;
+          byPlayerAndBin[s.player][bin].ourTotals.push(s.total);
+          const oppPts = s.oppTotal != null ? s.oppTotal : (s.won ? Math.max(0, s.total - 5) : s.total + 7);
+          byPlayerAndBin[s.player][bin].oppTotals.push(oppPts);
+          if (s.won) byPlayerAndBin[s.player][bin].wins++;
+          else byPlayerAndBin[s.player][bin].deficitsWhenLose.push(s.race - s.total);
+          const losingPts = s.racks.filter(r => r < 14);
+          byPlayerAndBin[s.player][bin].losingPts.push(...losingPts);
+        }
+      }
+      return byPlayerAndBin;
+    }
+
+    function getHistoricalPtsWhenLose() {
+      const history = getFilteredHistory();
+      const byPlayer = {};
+      for (const m of history) {
+        for (const s of m.sets) {
+          const losingPts = s.racks.filter(r => r < 14);
+          if (!byPlayer[s.player]) byPlayer[s.player] = [];
+          byPlayer[s.player].push(...losingPts);
+        }
+      }
+      const out = {};
+      for (const [player, pts] of Object.entries(byPlayer)) {
+        if (pts.length === 0) continue;
+        out[player] = Math.round(pts.reduce((a, b) => a + b, 0) / pts.length * 10) / 10;
+      }
+      return out;
+    }
+
+    function getHistoricalWinRateByPlayer() {
+      const history = getFilteredHistory();
+      const byPlayer = {};
+      for (const m of history) {
+        for (const s of m.sets) {
+          if (!byPlayer[s.player]) byPlayer[s.player] = { wins: 0, total: 0, oppSum: 0, oppSumWins: 0 };
+          byPlayer[s.player].total++;
+          if (s.won) byPlayer[s.player].wins++;
+          byPlayer[s.player].oppSum += s.oppRating;
+          if (s.won) byPlayer[s.player].oppSumWins += s.oppRating;
+        }
+      }
+      return byPlayer;
+    }
+
+    function getMatchCountByPlayer() {
+      const history = getFilteredHistory();
+      const out = {};
+      for (const m of history) {
+        const playersInMatch = [...new Set(m.sets.map(s => s.player))];
+        for (const p of playersInMatch) {
+          out[p] = (out[p] || 0) + 1;
+        }
+      }
+      return out;
+    }
+
+    const CURRENT_FARGO = { John: 503, Kat: 342, Kevin: 452, Stephan: 487, Eric: 548, Daysi: 324, Richard: 558 };
+
+    function buildPerformanceRows() {
+      const BINS = getBins(binSize);
+      const ptsWhenLose = getHistoricalPtsWhenLose();
+      const wlByPlayer = getHistoricalWinRateByPlayer();
+      const matchCountByPlayer = getMatchCountByPlayer();
+      const byPlayerAndBin = getHistoricalByPlayerAndOppBin();
+      const players = Object.keys(wlByPlayer).sort();
+      const rows = players.map(player => {
+        const wl = wlByPlayer[player];
+        const wins = wl.wins;
+        const total = wl.total;
+        const losses = total - wins;
+        const winPct = total > 0 ? Math.round(100 * wins / total) : 0;
+        const matchesPlayed = matchCountByPlayer[player] || 0;
+        const pts = ptsWhenLose[player] != null ? ptsWhenLose[player].toFixed(1) : '—';
+        const fargo = CURRENT_FARGO[player] != null ? CURRENT_FARGO[player] : '—';
+        const binsData = BINS.map(bin => {
+          const d = byPlayerAndBin[player] && byPlayerAndBin[player][bin];
+          if (!d || d.total === 0) return { bin, winPctBin: -1, ptsBin: '—', wlBin: '—', total: 0, score: -1, ourAvg: '—', oppAvg: '—' };
+          const ptsBin = d.losingPts.length > 0 ? (d.losingPts.reduce((a, b) => a + b, 0) / d.losingPts.length).toFixed(1) : '—';
+          const ptsWhenLoseNum = d.losingPts.length > 0 ? d.losingPts.reduce((a, b) => a + b, 0) / d.losingPts.length : 0;
+          const wlBin = d.wins + 'W-' + (d.total - d.wins) + 'L';
+          const winPctBin = Math.round(100 * d.wins / d.total);
+          const avgDeficitWhenLose = d.deficitsWhenLose.length > 0 ? d.deficitsWhenLose.reduce((a, b) => a + b, 0) / d.deficitsWhenLose.length : 0;
+          const ourAvg = d.ourTotals.length > 0 ? (d.ourTotals.reduce((a, b) => a + b, 0) / d.ourTotals.length).toFixed(1) : '—';
+          const oppAvg = d.oppTotals.length > 0 ? (d.oppTotals.reduce((a, b) => a + b, 0) / d.oppTotals.length).toFixed(1) : '—';
+          const ptsNorm = (ptsWhenLoseNum / 7) * 100;
+          const deficitScore = d.deficitsWhenLose.length > 0 ? Math.max(0, 100 - avgDeficitWhenLose * 4) : 100;
+          const score = winPctBin * 0.5 + ptsNorm * 0.25 + deficitScore * 0.25;
+          return { bin, winPctBin, ptsBin, wlBin, total: d.total, score, ourAvg, oppAvg };
+        });
+        const withData = binsData.filter(x => x.total > 0);
+        const bestScore = withData.length ? Math.max(...withData.map(x => x.score)) : -1;
+        const worstScore = withData.length ? Math.min(...withData.map(x => x.score)) : -1;
+        const binCells = binsData.map(({ bin, winPctBin, ptsBin, wlBin, total, score, ourAvg, oppAvg }) => {
+          if (total === 0) return '<td class="bin-cell">—</td>';
+          const cls = 'bin-cell' + (score === bestScore && bestScore !== worstScore ? ' bin-best' : '') + (score === worstScore && bestScore !== worstScore ? ' bin-worst' : '');
+          const winPctStr = winPctBin + '%';
+          const avgLine = 'Our avg: ' + ourAvg + ' · Opp avg: ' + oppAvg;
+          const title = 'Balls/lose rack ' + ptsBin + ', ' + wlBin + ', ' + winPctStr + '. ' + avgLine;
+          return '<td class="' + cls + '" title="' + title + '">' + ptsBin + '<br><small>' + wlBin + ' ' + winPctStr + '</small><br><small style="color:var(--muted);">' + avgLine + '</small></td>';
+        }).join('');
+        return {
+          player,
+          fargo,
+          ptsWhenLose: pts,
+          wins,
+          losses,
+          total,
+          matchesPlayed,
+          winPct,
+          ptsWhenLoseNum: ptsWhenLose[player] != null ? ptsWhenLose[player] : 0,
+          binCells
+        };
+      });
+      rows.sort((a, b) => {
+        if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+        return (b.ptsWhenLoseNum - a.ptsWhenLoseNum);
+      });
+      rows.forEach((r, i) => { r.rank = i + 1; });
+      return rows;
+    }
+
+    function renderMatchSelect() {
+      const withIds = [];
+      BAD_DECISIONS_HISTORY.forEach((m, i) => {
+        withIds.push({ date: m.date, match: m.match, matchId: HISTORY_MATCH_IDS_ORIGINAL_ORDER[i] });
+      });
+      (BAD_DECISIONS_HISTORY_EXTRA || []).forEach((m, i) => {
+        withIds.push({ date: m.date, match: m.match, matchId: (HISTORY_MATCH_IDS_EXTRA[i] || '') });
+      });
+      const sorted = withIds.slice().sort((a, b) => a.date.localeCompare(b.date));
+      const options = sorted.map(m => {
+        const label = m.date + ' – ' + m.match;
+        const val = m.matchId ? BASE_MATCH_URL + m.matchId : '';
+        return '<option value="' + (val || '') + '">' + label + '</option>';
+      }).join('');
+      document.getElementById('history-match-select').innerHTML = '<option value="">— Select a match —</option>' + options;
+      document.getElementById('history-match-select').addEventListener('change', function() {
+        const url = this.value;
+        if (url) { window.open(url, '_blank', 'noopener'); this.value = ''; }
+      });
+    }
+
+    function render() {
+      const filtered = getFilteredHistory();
+      const hintEl = document.getElementById('date-slicer-hint');
+      if (hintEl) hintEl.textContent = filtered.length + ' of ' + BAD_DECISIONS_HISTORY_ALL.length + ' matches';
+      const BINS = getBins(binSize);
+      const rows = buildPerformanceRows();
+      const headerRow = '<tr><th class="nowrap">Rank</th><th class="nowrap">Player</th><th class="num nowrap">Fargo</th><th class="num nowrap">Avg Balls/Losing Rack</th><th class="num nowrap">W–L</th><th class="num nowrap">Win %</th><th class="num nowrap">Matches</th>' +
+        BINS.map(b => '<th class="bin-cell">' + b + '</th>').join('') + '</tr>';
+      document.getElementById('perf-head').innerHTML = headerRow;
+      const tbody = document.getElementById('perf-body');
+      tbody.innerHTML = rows.map(r =>
+        '<tr><td class="rank nowrap">' + r.rank + '</td><td class="nowrap">' + r.player + '</td><td class="num nowrap">' + r.fargo + '</td><td class="num nowrap">' + r.ptsWhenLose + '</td><td class="num nowrap">' + r.wins + '–' + r.losses + '</td><td class="num nowrap">' + r.winPct + '%</td><td class="num nowrap">' + r.matchesPlayed + '</td>' + r.binCells + '</tr>'
+      ).join('');
+    }
+
+    document.getElementById('bin-size-select').addEventListener('change', function() {
+      binSize = parseInt(this.value, 10);
+      render();
+    });
+    const range = getDateRange();
+    const dateFromEl = document.getElementById('date-from');
+    const dateToEl = document.getElementById('date-to');
+    if (dateFromEl) {
+      dateFromEl.min = range.min;
+      dateFromEl.max = range.max;
+      dateFromEl.value = range.min;
+    }
+    if (dateToEl) {
+      dateToEl.min = range.min;
+      dateToEl.max = range.max;
+      dateToEl.value = range.max;
+    }
+    if (dateFromEl) dateFromEl.addEventListener('change', render);
+    if (dateToEl) dateToEl.addEventListener('change', render);
+    const resetBtn = document.getElementById('date-slicer-reset');
+    if (resetBtn) resetBtn.addEventListener('click', function() {
+      if (dateFromEl) dateFromEl.value = range.min;
+      if (dateToEl) dateToEl.value = range.max;
+      render();
+    });
+    renderMatchSelect();
+    render();
+  </script>
+</body>
+</html>
