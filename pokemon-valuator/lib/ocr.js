@@ -1,6 +1,6 @@
 import Tesseract from "tesseract.js";
 import sharp from "sharp";
-import { extractAttackNames } from "./attacks.js";
+import { extractAttackNames, KNOWN_MOVE_FRAGMENTS } from "./attacks.js";
 import { detectFinishHints } from "./finish.js";
 import { findNamesInText, getPokemonNames } from "./pokemonNames.js";
 
@@ -27,8 +27,45 @@ const SUFFIXES = ["ex", "EX", "GX", "V", "VMAX", "VSTAR", "LV.X", "BREAK"];
 /**
  * Preprocess an uploaded card photo for more reliable OCR.
  */
+async function deglare(buffer) {
+  // Top loaders create specular white blowouts — flatten the brightest pixels
+  // so OCR can still read name/HP underneath.
+  const { data, info } = await sharp(buffer)
+    .rotate()
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const channels = info.channels;
+  for (let i = 0; i < data.length; i += channels) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    // Hot specular highlight: very bright and low saturation
+    if (max >= 245 && max - min < 18) {
+      data[i] = 210;
+      data[i + 1] = 210;
+      data[i + 2] = 210;
+    } else if (max >= 235 && max - min < 12) {
+      data[i] = Math.min(220, r);
+      data[i + 1] = Math.min(220, g);
+      data[i + 2] = Math.min(220, b);
+    }
+  }
+
+  return sharp(data, {
+    raw: { width: info.width, height: info.height, channels },
+  })
+    .removeAlpha()
+    .png()
+    .toBuffer();
+}
+
 export async function preprocessForOcr(buffer) {
-  const image = sharp(buffer).rotate();
+  const cleaned = await deglare(buffer);
+  const image = sharp(cleaned);
   const meta = await image.metadata();
   const width = meta.width || 1000;
   const height = meta.height || 1400;
@@ -43,8 +80,7 @@ export async function preprocessForOcr(buffer) {
     .png()
     .toBuffer();
 
-  const top = await sharp(buffer)
-    .rotate()
+  const top = await sharp(cleaned)
     .extract({
       left: Math.floor(width * 0.05),
       top: Math.floor(height * 0.02),
@@ -58,8 +94,7 @@ export async function preprocessForOcr(buffer) {
     .png()
     .toBuffer();
 
-  const bottom = await sharp(buffer)
-    .rotate()
+  const bottom = await sharp(cleaned)
     .extract({
       left: 0,
       top: Math.floor(height * 0.78),
@@ -75,8 +110,7 @@ export async function preprocessForOcr(buffer) {
 
   // EX reverse holos often stamp the set name in the lower-right of the art box.
   // Capture a couple crops/thresholds so fragments like "FORCES" still land.
-  const stampA = await sharp(buffer)
-    .rotate()
+  const stampA = await sharp(cleaned)
     .extract({
       left: Math.floor(width * 0.42),
       top: Math.floor(height * 0.38),
@@ -90,8 +124,7 @@ export async function preprocessForOcr(buffer) {
     .png()
     .toBuffer();
 
-  const stampB = await sharp(buffer)
-    .rotate()
+  const stampB = await sharp(cleaned)
     .extract({
       left: Math.floor(width * 0.5),
       top: Math.floor(height * 0.45),
@@ -141,8 +174,13 @@ function extractCollectorNumbers(text) {
 }
 
 function extractHp(text) {
-  const m = text.match(HP_RE);
-  return m ? Number(m[1]) : null;
+  // Only trust clear HP markers — glare OCR invents numbers constantly.
+  const matches = [...String(text).matchAll(/\b(\d{2,3})\s*HP\b/gi)];
+  for (const m of matches) {
+    const n = Number(m[1]);
+    if (n >= 30 && n <= 340) return n;
+  }
+  return null;
 }
 
 function scrubName(raw) {
@@ -247,7 +285,16 @@ export async function identifyFromImage(buffer) {
     });
   });
 
+  // Rescue known move/ability fragments from noisy glare OCR
+  const lowerCombined = combined.toLowerCase();
+  for (const frag of KNOWN_MOVE_FRAGMENTS) {
+    if (lowerCombined.includes(frag) && !attacks.some((a) => a.toLowerCase().includes(frag))) {
+      attacks.unshift(frag.replace(/\b\w/g, (c) => c.toUpperCase()));
+    }
+  }
+
   const rawText = combined.trim();
+  const promo = extractPromoHints(combined);
   return {
     rawText,
     names: dictNames.slice(0, 6),
@@ -255,5 +302,30 @@ export async function identifyFromImage(buffer) {
     hp: extractHp(combined),
     attacks: attacks.slice(0, 6),
     finish: detectFinishHints(rawText),
+    promo,
+  };
+}
+
+function extractPromoHints(text) {
+  const t = String(text || "");
+  const lower = t.toLowerCase();
+  const codes = new Set();
+  if (/\bpromo\b/i.test(t) || /\bsvp\b/i.test(t) || /\bmep\b/i.test(t)) {
+    codes.add("promo");
+  }
+  if (/\bsvp\b/i.test(t)) codes.add("svp");
+  if (/\bmep\b/i.test(t)) codes.add("mep");
+  if (/25(?:th)?/.test(lower) || /anniversary/.test(lower)) codes.add("25th");
+
+  const numbers = [];
+  for (const m of t.matchAll(/\b(?:svp|mep|en)?\s*0*([0-9]{2,3})\b/gi)) {
+    const n = m[1];
+    if (Number(n) >= 1 && Number(n) <= 300) numbers.push(n);
+  }
+
+  return {
+    isPromo: codes.has("promo") || codes.has("svp") || codes.has("mep") || codes.has("25th"),
+    sets: [...codes],
+    numbers: [...new Set(numbers)].slice(0, 6),
   };
 }

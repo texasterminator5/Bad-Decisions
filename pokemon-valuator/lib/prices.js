@@ -55,17 +55,23 @@ export async function searchPokemonTcgByAttack({ attack, hp, pageSize = 20 }) {
   if (!attack) return [];
   const token = String(attack).replace(/[^\w\s'.\-]/g, " ").trim().split(/\s+/)[0];
   if (!token || token.length < 4) return [];
-  const parts = [`attacks.name:${token}*`];
-  if (hp) parts.push(`hp:${hp}`);
-  try {
-    return await fetchPokemonTcgCards(parts.join(" "), pageSize);
-  } catch {
+
+  const queries = [
+    hp ? `attacks.name:${token}* hp:${hp}` : null,
+    `attacks.name:${token}*`,
+    `attacks.name:${token}`,
+    `abilities.name:${token}*`,
+  ].filter(Boolean);
+
+  for (const q of queries) {
     try {
-      return await fetchPokemonTcgCards(`attacks.name:${token}`, pageSize);
+      const batch = await fetchPokemonTcgCards(q, pageSize);
+      if (batch.length) return batch;
     } catch {
-      return [];
+      // try next query form
     }
   }
+  return [];
 }
 
 /**
@@ -303,25 +309,34 @@ export async function searchTcgdex({ name, number, limit = 8 }) {
     }
 
     const imageBase = card.image || null;
+    const localId = String(card.localId ?? "");
+    const setId = card.set?.id;
+    // Fallback art for promo sets that omit TCGdex image URLs
+    const ptcgSmall =
+      !imageBase && setId && localId
+        ? `https://images.pokemontcg.io/${setId}/${localId.replace(/^0+/, "")}.png`
+        : null;
+
     return {
       id: card.id,
       name: card.name,
-      number: String(card.localId ?? ""),
+      number: localId,
       rarity: card.rarity || null,
       set: {
-        id: card.set?.id,
+        id: setId,
         name: card.set?.name,
         series: null,
         printedTotal: card.set?.cardCount?.official || null,
         releaseDate: null,
       },
       images: {
-        small: imageBase ? `${imageBase}/low.webp` : null,
-        large: imageBase ? `${imageBase}/high.webp` : null,
+        small: imageBase ? `${imageBase}/low.webp` : ptcgSmall,
+        large: imageBase ? `${imageBase}/high.webp` : ptcgSmall,
       },
       artist: card.illustrator || null,
       hp: card.hp != null ? String(card.hp) : null,
       types: card.types || [],
+      attacks: (card.attacks || []).map((a) => a.name).filter(Boolean),
       prices,
       headline: bestMarket(prices),
       links: { tcgplayer: null, cardmarket: null },
@@ -377,6 +392,22 @@ function scoreMatch(card, hints) {
     }
   }
 
+  const promo = hints.promo || {};
+  const setId = String(card.set?.id || card.id || "").toLowerCase();
+  const setName = String(card.set?.name || "").toLowerCase();
+  if (promo.isPromo) {
+    if (/promo|black star|svp|mep/.test(setName) || /(^|-)(svp|mep)(-|$)/.test(setId)) {
+      score += 50;
+    }
+    if (promo.sets?.includes("25th") && /mep|celebrations|25/.test(`${setId} ${setName}`)) {
+      score += 35;
+    }
+    for (const n of promo.numbers || []) {
+      const cardNum = String(card.number || "").replace(/^0+/, "");
+      if (cardNum && cardNum === String(n).replace(/^0+/, "")) score += 55;
+    }
+  }
+
   if (card.headline?.amount != null) score += 2;
   return score;
 }
@@ -413,37 +444,46 @@ export async function resolveCards(hints = {}) {
   // Prefer the top OCR/dictionary guess; only fall back to weaker names if needed
   for (const name of nameCandidates.slice(0, 3)) {
     try {
-      let batch = await searchPokemonTcg({ name, number, hp });
+      // Search name(+number) without HP first — bad OCR HP was wiping real hits
+      let batch = await searchPokemonTcg({ name, number, hp: null });
+      if (!batch.length && hp) {
+        batch = await searchPokemonTcg({ name, number: null, hp });
+      }
       if (!batch.length) {
         batch = await searchPokemonTcg({ name, number: null, hp: null });
-        if (number) {
-          const num = String(number).replace(/^0+(\d)/, "$1").toLowerCase();
-          const filtered = batch.filter(
-            (c) =>
-              String(c.number).replace(/^0+(\d)/, "$1").toLowerCase() === num
-          );
-          if (filtered.length) batch = filtered;
-        }
+      }
+      if (number) {
+        const num = String(number).replace(/^0+(\d)/, "$1").toLowerCase();
+        const filtered = batch.filter(
+          (c) =>
+            String(c.number).replace(/^0+(\d)/, "$1").toLowerCase() === num
+        );
+        if (filtered.length) batch = filtered;
       }
       for (const card of batch) {
         if (!byId.has(card.id)) byId.set(card.id, card);
       }
-      // Strong primary hit — don't dilute with noisier OCR name guesses
-      if (byId.size && name === nameCandidates[0]) break;
     } catch {
-      try {
-        const fallback = await searchTcgdex({ name, number });
-        for (const card of fallback) {
-          if (!byId.has(card.id)) byId.set(card.id, card);
-        }
-        if (byId.size && name === nameCandidates[0]) {
-          source = "tcgdex";
-          break;
-        }
-      } catch {
-        // try next name
-      }
+      // continue to TCGdex
     }
+
+    // Always merge TCGdex for the primary name — catches promo sets
+    // (e.g. MEP / SVP) missing from pokemontcg.io.
+    try {
+      const fallback = await searchTcgdex({
+        name,
+        number: name === nameCandidates[0] ? number : null,
+        limit: name === nameCandidates[0] ? 24 : 8,
+      });
+      for (const card of fallback) {
+        if (!byId.has(card.id)) byId.set(card.id, card);
+      }
+      if (fallback.length) source = source || "tcgdex";
+    } catch {
+      // try next name
+    }
+
+    if (byId.size && name === nameCandidates[0]) break;
   }
 
   results = [...byId.values()];

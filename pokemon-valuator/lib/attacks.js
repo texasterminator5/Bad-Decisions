@@ -3,7 +3,16 @@ const ATTACK_LINE_RE =
   /\b([A-Z][A-Za-z][A-Za-z'’\-]{2,24})(?:\s+[A-Z][A-Za-z'’\-]{2,18}){0,2}\b/g;
 
 const NOISE =
-  /^(basic|stage|weakness|resistance|retreat|pokemon|pokémon|choose|this|attack|damage|energy|length|weight|ability|power|put|each|your|opponent|affected|plus|more|does|cost)$/i;
+  /^(basic|stage|weakness|resistance|retreat|pokemon|pokémon|choose|this|attack|damage|energy|length|weight|ability|power|put|each|your|opponent|affected|plus|more|does|cost|nintendo|creatures|freak)$/i;
+
+/** Distinctive ability / attack phrases worth forcing into search even if OCR is messy */
+export const KNOWN_MOVE_FRAGMENTS = [
+  "voraciousness",
+  "thudding",
+  "splatter",
+  "leftovers",
+  "thudding press",
+];
 
 /**
  * Pull likely attack names from OCR text.

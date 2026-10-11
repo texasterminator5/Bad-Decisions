@@ -13,7 +13,7 @@ import numpy as np
 
 # Pokémon TCG card ratio is ~63mm x 88mm → width/height ≈ 0.716
 TARGET_RATIO = 63 / 88
-RATIO_TOL = 0.22
+RATIO_TOL = 0.28
 
 
 def order_points(pts: np.ndarray) -> np.ndarray:
@@ -27,120 +27,94 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def box_from_contour(cnt, img_w: int, img_h: int):
-    peri = cv2.arcLength(cnt, True)
-    approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
-    if len(approx) == 4:
-        pts = approx.reshape(4, 2).astype("float32")
-        rect = order_points(pts)
-        (tl, tr, br, bl) = rect
-        width = max(
-            float(np.linalg.norm(br - bl)),
-            float(np.linalg.norm(tr - tl)),
-        )
-        height = max(
-            float(np.linalg.norm(tr - br)),
-            float(np.linalg.norm(tl - bl)),
-        )
-    else:
-        x, y, w, h = cv2.boundingRect(cnt)
-        if w < 8 or h < 8:
-            return None
-        rect = np.array(
-            [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype="float32"
-        )
-        width, height = float(w), float(h)
-
-    if width <= 0 or height <= 0:
+def box_from_contour(cnt, img_w: int, img_h: int, *, max_area_frac: float = 0.55):
+    area_px = float(cv2.contourArea(cnt))
+    frame_area = float(img_w * img_h)
+    if area_px < frame_area * 0.03:
         return None
 
-    # Normalize orientation so height is the long side
-    if width > height:
-        width, height = height, width
+    rect = cv2.minAreaRect(cnt)
+    (cx, cy), (rw, rh), _angle = rect
+    if rw <= 1 or rh <= 1:
+        return None
 
+    width, height = float(min(rw, rh)), float(max(rw, rh))
     ratio = width / height
     if abs(ratio - TARGET_RATIO) > RATIO_TOL:
+        # Also accept top-loader outer shells which are slightly squarer/taller
+        if not (0.55 <= ratio <= 0.95):
+            return None
+
+    box_area = width * height
+    if box_area < frame_area * 0.04 or box_area > frame_area * max_area_frac:
         return None
 
-    area = width * height
-    frame_area = float(img_w * img_h)
-    if area < frame_area * 0.02 or area > frame_area * 0.96:
+    # Aspect of axis-aligned bounding box should also be card-like-ish
+    x, y, bw, bh = cv2.boundingRect(cnt)
+    if bw < 60 or bh < 60:
+        return None
+    aa_ratio = min(bw, bh) / max(bw, bh)
+    if aa_ratio < 0.55:
         return None
 
-    xs = rect[:, 0]
-    ys = rect[:, 1]
-    x0 = max(0, int(np.floor(xs.min())))
-    y0 = max(0, int(np.floor(ys.min())))
-    x1 = min(img_w, int(np.ceil(xs.max())))
-    y1 = min(img_h, int(np.ceil(ys.max())))
-    bw, bh = x1 - x0, y1 - y0
-    if bw < 40 or bh < 40:
-        return None
+    box_pts = cv2.boxPoints(rect).astype("float32")
+    ordered = order_points(box_pts)
 
     return {
-        "x": x0,
-        "y": y0,
-        "width": bw,
-        "height": bh,
-        "area": int(area),
+        "x": int(max(0, x)),
+        "y": int(max(0, y)),
+        "width": int(min(img_w - x, bw)),
+        "height": int(min(img_h - y, bh)),
+        "area": int(box_area),
         "ratio": round(ratio, 3),
-        "quad": [[float(px), float(py)] for px, py in rect.tolist()],
+        "quad": [[float(px), float(py)] for px, py in ordered.tolist()],
+        "center": [float(cx), float(cy)],
     }
 
 
-def find_cards(image_path: str) -> list[dict]:
-    original = cv2.imread(image_path)
-    if original is None:
-        raise SystemExit(f"Could not read image: {image_path}")
-
-    img_h, img_w = original.shape[:2]
-    scale = 1000 / max(img_w, img_h)
-    if scale < 1:
-        work = cv2.resize(original, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    else:
-        work = original.copy()
-        scale = 1.0
-
+def collect_candidates(work, max_area_frac: float = 0.55) -> list[dict]:
     wh, ww = work.shape[:2]
     gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
     candidates: list[dict] = []
 
-    # Strategy A: edges + contours
-    edges = cv2.Canny(gray, 40, 140)
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=2)
-    cnts, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    for cnt in cnts:
-        box = box_from_contour(cnt, ww, wh)
-        if box:
-            candidates.append(box)
+    # Multiple edge sensitivities — top loaders + glare need softer and harder passes
+    for t1, t2, dilate_iters in (
+        (25, 90, 2),
+        (40, 140, 2),
+        (60, 180, 1),
+        (15, 60, 3),
+    ):
+        edges = cv2.Canny(gray, t1, t2)
+        kernel = np.ones((3, 3), np.uint8)
+        edges = cv2.dilate(edges, kernel, iterations=dilate_iters)
+        # RETR_LIST: sleeved cards often sit inside a larger outer contour
+        cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in cnts:
+            box = box_from_contour(cnt, ww, wh, max_area_frac=max_area_frac)
+            if box:
+                candidates.append(box)
 
-    # Strategy B: adaptive threshold blobs (helps on busy table backgrounds)
-    thr = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 5
-    )
-    thr = cv2.bitwise_not(thr)
-    thr = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=2)
-    cnts, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    for cnt in cnts:
-        box = box_from_contour(cnt, ww, wh)
-        if box:
-            candidates.append(box)
+    # Color/brightness threshold: cards are brighter than a dark table
+    for blur_k in (5, 9):
+        g = cv2.GaussianBlur(gray, (blur_k, blur_k), 0)
+        _, thr = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Ensure cards are white: if most pixels are white, invert
+        if np.mean(thr) > 127:
+            thr = cv2.bitwise_not(thr)
+        thr = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
+        thr = cv2.morphologyEx(thr, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
+        cnts, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in cnts:
+            box = box_from_contour(cnt, ww, wh, max_area_frac=max_area_frac)
+            if box:
+                candidates.append(box)
 
-    # Scale boxes back to original coordinates
-    if scale != 1.0:
-        inv = 1.0 / scale
-        for box in candidates:
-            box["x"] = int(round(box["x"] * inv))
-            box["y"] = int(round(box["y"] * inv))
-            box["width"] = int(round(box["width"] * inv))
-            box["height"] = int(round(box["height"] * inv))
-            box["area"] = int(box["width"] * box["height"])
-            box["quad"] = [[p[0] * inv, p[1] * inv] for p in box["quad"]]
+    return candidates
 
-    # Non-maximum suppression by IoU
-    candidates.sort(key=lambda b: b["area"], reverse=True)
+
+def nms(candidates: list[dict], iou_thresh: float = 0.35) -> list[dict]:
+    candidates = sorted(candidates, key=lambda b: b["area"], reverse=True)
     kept: list[dict] = []
 
     def iou(a, b):
@@ -156,14 +130,136 @@ def find_cards(image_path: str) -> list[dict]:
         return inter / union if union else 0.0
 
     for box in candidates:
-        if any(iou(box, k) > 0.35 for k in kept):
+        if any(iou(box, k) > iou_thresh for k in kept):
             continue
         kept.append(box)
+    return kept
 
-    # Sort reading-order: top-to-bottom, then left-to-right
+
+def scale_boxes(boxes: list[dict], inv: float) -> list[dict]:
+    if inv == 1.0:
+        return boxes
+    out = []
+    for box in boxes:
+        b = dict(box)
+        b["x"] = int(round(box["x"] * inv))
+        b["y"] = int(round(box["y"] * inv))
+        b["width"] = int(round(box["width"] * inv))
+        b["height"] = int(round(box["height"] * inv))
+        b["area"] = int(b["width"] * b["height"])
+        b["quad"] = [[p[0] * inv, p[1] * inv] for p in box["quad"]]
+        if "center" in box:
+            b["center"] = [box["center"][0] * inv, box["center"][1] * inv]
+        out.append(b)
+    return out
+
+
+def split_landscape_fallback(img_w: int, img_h: int) -> list[dict]:
+    """When two cards sit side-by-side and contours merge, split the frame."""
+    if img_w < img_h * 1.05:
+        return []
+    mid = img_w // 2
+    gap = int(img_w * 0.02)
+    left_w = mid - gap
+    right_x = mid + gap
+    right_w = img_w - right_x
+    # Prefer portrait card crops within each half
+    return [
+        {
+            "x": int(img_w * 0.03),
+            "y": int(img_h * 0.05),
+            "width": int(left_w - img_w * 0.03),
+            "height": int(img_h * 0.9),
+            "area": 0,
+            "ratio": 0.7,
+            "quad": [],
+            "fallback": "left-half",
+        },
+        {
+            "x": right_x,
+            "y": int(img_h * 0.05),
+            "width": int(right_w - img_w * 0.03),
+            "height": int(img_h * 0.9),
+            "area": 0,
+            "ratio": 0.7,
+            "quad": [],
+            "fallback": "right-half",
+        },
+    ]
+
+
+def find_cards(image_path: str) -> list[dict]:
+    original = cv2.imread(image_path)
+    if original is None:
+        raise SystemExit(f"Could not read image: {image_path}")
+
+    img_h, img_w = original.shape[:2]
+    scale = 1200 / max(img_w, img_h)
+    if scale < 1:
+        work = cv2.resize(original, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    else:
+        work = original.copy()
+        scale = 1.0
+
+    candidates = collect_candidates(work, max_area_frac=0.55)
+    kept = nms(candidates)
+    kept = scale_boxes(kept, 1.0 / scale if scale != 1.0 else 1.0)
+
+    # Prefer a cluster of similarly sized card boxes (true multi-card spreads)
+    if len(kept) >= 2:
+        areas = np.array([b["area"] for b in kept], dtype=float)
+        median = float(np.median(areas[:4]))
+        similar = [
+            b
+            for b in kept
+            if 0.45 * median <= b["area"] <= 2.2 * median
+        ]
+        if len(similar) >= 2:
+            kept = similar
+
+    # Reject a solitary near-full-frame false positive
+    frame_area = float(img_w * img_h)
+    kept = [b for b in kept if b["area"] <= frame_area * 0.6]
+
+    if len(kept) < 2:
+        # Contours merged (common with top loaders on a dark desk) — try halves
+        halves = split_landscape_fallback(img_w, img_h)
+        if halves:
+            # Only use fallback if each half looks card-filled (bright content)
+            usable = []
+            for box in halves:
+                crop = original[
+                    box["y"] : box["y"] + box["height"],
+                    box["x"] : box["x"] + box["width"],
+                ]
+                if crop.size == 0:
+                    continue
+                # Re-detect inside each half for a tighter crop
+                local = collect_candidates(crop, max_area_frac=0.9)
+                local = nms(local)
+                if local:
+                    best = max(local, key=lambda b: b["area"])
+                    usable.append(
+                        {
+                            "x": box["x"] + best["x"],
+                            "y": box["y"] + best["y"],
+                            "width": best["width"],
+                            "height": best["height"],
+                            "area": best["area"],
+                            "ratio": best["ratio"],
+                            "quad": [
+                                [p[0] + box["x"], p[1] + box["y"]] for p in best["quad"]
+                            ],
+                            "fallback": box.get("fallback"),
+                        }
+                    )
+                else:
+                    box["area"] = box["width"] * box["height"]
+                    usable.append(box)
+            if len(usable) >= 2:
+                kept = usable
+
     kept.sort(key=lambda b: (b["y"] // max(1, img_h // 8), b["x"]))
-
-    # Cap to a sane number for mobile photos
     return kept[:12]
 
 

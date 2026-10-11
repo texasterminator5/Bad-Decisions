@@ -77,6 +77,19 @@ export function detectFinishHints(rawText = "", extras = {}) {
     hints.reasons.push("ocr:holo");
   }
 
+  // Celebrations / 25th anniversary stamped promos
+  if (
+    /25(?:th)?/.test(lower) ||
+    /anniversary/.test(lower) ||
+    /celebrations/.test(lower) ||
+    /\bmep\b/.test(lower) ||
+    /\bsvp\b/.test(lower)
+  ) {
+    hints.stamped = true;
+    hints.confidence += 30;
+    hints.reasons.push("ocr:promo-stamp");
+  }
+
   // Caller can pass set name from a matched card to reinforce stamp detection
   if (extras.setName && stampSets.some((re) => re.test(extras.setName))) {
     // only useful combined with EX/stamp evidence already present

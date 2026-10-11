@@ -102,7 +102,12 @@ export async function rankByVisualSimilarity(uploadBuffer, cards, { limit = 16 }
         const buf = await fetchImageBuffer(url);
         const hash = await averageHash(buf);
         const distance = hammingDistance(uploadHash, hash);
-        const visualScore = Math.max(0, 140 - distance);
+        // Phone photos through top loaders are noisy — only strong
+        // visual matches should outrank OCR/set evidence.
+        let visualScore = 0;
+        if (distance <= 70) visualScore = 140 - distance;
+        else if (distance <= 95) visualScore = Math.max(0, 90 - distance);
+        else visualScore = 0;
         return { card, distance, visualScore };
       } catch {
         return { card, distance: 999, visualScore: 0 };

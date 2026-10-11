@@ -112,7 +112,7 @@ function titleCase(s) {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function collectCandidateTokens(normalized) {
+function collectCandidateTokens(normalized, dictionary = []) {
   const tokens = new Set();
 
   for (const t of normalized.split(/\s+/)) {
@@ -130,7 +130,6 @@ function collectCandidateTokens(normalized) {
     for (const part of chunk.split(" ")) {
       if (part.length >= 4) tokens.add(part);
     }
-    // Re-join last 2–3 tokens (handles "u todile", "to todile")
     const parts = chunk.split(" ").filter(Boolean);
     if (parts.length >= 2) {
       tokens.add(parts.slice(-2).join(""));
@@ -141,25 +140,32 @@ function collectCandidateTokens(normalized) {
     }
   }
 
-  // Focused sliding windows near HP / top-of-card text (not the whole essay)
-  const focusChunks = [];
-  for (const m of normalized.matchAll(
-    /([a-z0-9\s']{0,30}\d{2,3}\s*hp[a-z0-9\s']{0,12})/g
-  )) {
-    focusChunks.push(m[1]);
-  }
-  focusChunks.push(normalized.slice(0, 180));
-
-  for (const chunk of focusChunks) {
-    const letters = chunk.replace(/[^a-z]/g, "");
-    for (let len = 6; len <= 11; len++) {
-      for (let i = 0; i + len <= letters.length; i += 2) {
-        tokens.add(letters.slice(i, i + len));
-      }
+  // Scan letter-only stream for dictionary names (and near-miss windows)
+  const letters = normalized.replace(/[^a-z]/g, "");
+  for (const name of dictionary) {
+    const folded = ocrFold(name);
+    if (folded.length < 5) continue;
+    if (letters.includes(folded)) tokens.add(folded);
+    // Also keep same-length windows around each occurrence for fuzzy neighbors
+    let from = 0;
+    while (from < letters.length) {
+      const hit = letters.indexOf(folded.slice(0, 4), from);
+      if (hit < 0) break;
+      tokens.add(letters.slice(hit, hit + folded.length));
+      tokens.add(letters.slice(Math.max(0, hit - 1), hit - 1 + folded.length));
+      from = hit + 1;
     }
   }
 
-  return [...tokens].slice(0, 80);
+  // Small sliding-window sample near the top of the OCR text
+  const head = letters.slice(0, 220);
+  for (let len = 6; len <= 10; len++) {
+    for (let i = 0; i + len <= head.length; i += 1) {
+      tokens.add(head.slice(i, i + len));
+    }
+  }
+
+  return [...tokens];
 }
 
 /**
@@ -206,7 +212,7 @@ export function findNamesInText(text, dictionary) {
   }
 
   // 2) Fuzzy token / window matches for mangled OCR
-  const tokens = collectCandidateTokens(normalized);
+  const tokens = collectCandidateTokens(normalized, dictionary);
   const foldedDict = dictionary.map((name) => ({
     name,
     folded: ocrFold(name),
@@ -222,8 +228,9 @@ export function findNamesInText(text, dictionary) {
       if (lenDiff > 2) continue;
       const dist = editDistance(foldedToken, folded);
       const maxDist = thresholdFor(folded);
-      // dist 0 already covered by exact pass; skip. Reject weak fuzzy hits.
-      if (dist === 0 || dist > maxDist) continue;
+      // dist 0 is still useful: OCR often glues the name to junk ("2ezsdtotodile")
+      // so the whitespace-exact pass above misses it.
+      if (dist > maxDist) continue;
 
       // Prefer same first letter, but allow OCR first-letter flips
       // when the rest is clearly the same (Motodile → Totodile).
@@ -232,16 +239,16 @@ export function findNamesInText(text, dictionary) {
         foldedToken.length >= 6 &&
         folded.length >= 6 &&
         foldedToken.slice(1) === folded.slice(1);
-      if (!sameFirst && !(dist === 1 && sharedSuffix)) continue;
+      if (!sameFirst && !(dist <= 1 && sharedSuffix)) continue;
 
-      let score = 34 - dist * 10;
+      let score = dist === 0 ? 48 : 34 - dist * 10;
       const approxIdx = normalized.indexOf(token.toLowerCase());
       if (approxIdx >= 0) {
         const window = normalized.slice(
           Math.max(0, approxIdx - 10),
           approxIdx + token.length + 16
         );
-        if (/\b\d{2,3}\s*hp\b/.test(window)) score += 28;
+        if (/\b\d{2,3}\s*hp\b/.test(window) || /\bhp\b/.test(window)) score += 20;
       }
       if ([...evolvesFrom].some((e) => e.includes(folded))) score -= 30;
       // Only keep reasonably confident fuzzy hits
