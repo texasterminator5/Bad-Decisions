@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -39,16 +39,16 @@
           Upload a photo of any Pokémon TCG card. We read the print, match the set, and pull live TCGPlayer market prices.
         </p>
 
-        <form id="upload-form" class="cta-row">
-          <label class="btn btn-primary file-btn">
-            <input id="file-input" type="file" accept="image/*" capture="environment" hidden />
+        <div class="cta-row" id="upload-form">
+          <label class="btn btn-primary file-btn" for="file-input">
+            <input id="file-input" class="file-overlay" type="file" accept="image/*" capture="environment" />
             Take or upload a photo
           </label>
-          <label class="btn btn-ghost file-btn">
-            <input id="library-input" type="file" accept="image/*" hidden />
+          <label class="btn btn-ghost file-btn" for="library-input">
+            <input id="library-input" class="file-overlay" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif" />
             Choose from photos
           </label>
-        </form>
+        </div>
         <p class="fineprint">On your phone, the first button opens the camera. Photos are processed for this request only — nothing is stored.</p>
       </div>
     </section>
@@ -123,6 +123,6 @@
     </p>
   </footer>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=2"></script>
 </body>
 </html>

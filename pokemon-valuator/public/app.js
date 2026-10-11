@@ -178,19 +178,71 @@ function renderAlts(cards, onPick) {
   });
 }
 
+/**
+ * Normalize gallery photos (including iPhone HEIC) to JPEG before upload.
+ */
+async function toUploadableImage(file) {
+  if (!file) throw new Error("No photo selected");
+
+  const isHeic = /heic|heif/i.test(file.type) || /\.heic$|\.heif$/i.test(file.name);
+  const needsConvert = isHeic || !/^image\/(jpeg|png|webp|gif)$/i.test(file.type);
+
+  if (!needsConvert && file.size < 9 * 1024 * 1024) {
+    return file;
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () =>
+        reject(
+          new Error(
+            isHeic
+              ? "Couldn't read that HEIC photo. In iPhone Settings → Camera, set Formats to Most Compatible, or share the photo as JPEG."
+              : "Couldn't read that photo. Try a JPG or PNG."
+          )
+        );
+      el.src = objectUrl;
+    });
+
+    const maxSide = 2000;
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92)
+    );
+    if (!blob) throw new Error("Couldn't prepare that photo for upload.");
+    return new File([blob], "card.jpg", { type: "image/jpeg" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 async function appraiseFile(file) {
   workspace.hidden = false;
   workspace.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  const url = URL.createObjectURL(file);
-  previewImg.src = url;
+  const previewUrl = URL.createObjectURL(file);
+  previewImg.src = previewUrl;
   renderHints(null);
-  setLoading("Reading the card…");
-
-  const body = new FormData();
-  body.append("image", file);
+  setLoading("Preparing photo…");
 
   try {
+    const uploadFile = await toUploadableImage(file);
+    setLoading("Reading the card…");
+
+    const body = new FormData();
+    body.append("image", uploadFile, uploadFile.name || "card.jpg");
+
     const res = await fetch("/api/appraise", { method: "POST", body });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Appraisal failed");

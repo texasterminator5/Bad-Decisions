@@ -231,7 +231,23 @@ main,
 }
 
 .file-btn {
+  position: relative;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* Keep the input tappable — display:none / [hidden] breaks pickers on iOS */
+.file-btn .file-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 100px; /* enlarges hit target in some WebKits */
 }
 
 .fineprint {
