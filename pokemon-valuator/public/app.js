@@ -1,4 +1,5 @@
 const fileInput = document.getElementById("file-input");
+const libraryInput = document.getElementById("library-input");
 const workspace = document.getElementById("workspace");
 const previewImg = document.getElementById("preview-img");
 const statusEl = document.getElementById("status");
@@ -8,7 +9,6 @@ const errorEl = document.getElementById("error-box");
 const hintChips = document.getElementById("hint-chips");
 const searchForm = document.getElementById("search-form");
 const searchResults = document.getElementById("search-results");
-const demoBtn = document.getElementById("demo-btn");
 
 function money(amount, currency = "USD") {
   if (amount == null) return "—";
@@ -208,11 +208,16 @@ async function appraiseFile(file) {
   }
 }
 
-fileInput.addEventListener("change", () => {
-  const file = fileInput.files?.[0];
-  if (file) appraiseFile(file);
-  fileInput.value = "";
-});
+function wireFileInput(input) {
+  input?.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) appraiseFile(file);
+    input.value = "";
+  });
+}
+
+wireFileInput(fileInput);
+wireFileInput(libraryInput);
 
 searchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -273,11 +278,4 @@ searchForm.addEventListener("submit", async (e) => {
   } catch (err) {
     searchResults.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
   }
-});
-
-demoBtn.addEventListener("click", async () => {
-  searchForm.name.value = "Charizard";
-  searchForm.number.value = "4";
-  searchForm.requestSubmit();
-  document.getElementById("manual").scrollIntoView({ behavior: "smooth" });
 });
