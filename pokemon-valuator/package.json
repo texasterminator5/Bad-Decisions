@@ -1,0 +1,21 @@
+{
+  "name": "valuedex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Identify a Pokémon card from a photo and look up live market prices",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^5.1.1"
+  }
+}

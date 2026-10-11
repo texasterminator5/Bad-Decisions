@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+*.log
+.env
+uploads/
+tmp/
+*.traineddata
+eng.traineddata
+last-upload.jpg
+last-appraisal.json
