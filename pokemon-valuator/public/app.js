@@ -2,6 +2,7 @@ const fileInput = document.getElementById("file-input");
 const libraryInput = document.getElementById("library-input");
 const workspace = document.getElementById("workspace");
 const previewImg = document.getElementById("preview-img");
+const previewEyebrow = document.getElementById("preview-eyebrow");
 const statusEl = document.getElementById("status");
 const bestEl = document.getElementById("best-result");
 const altsEl = document.getElementById("alt-results");
@@ -9,6 +10,10 @@ const errorEl = document.getElementById("error-box");
 const hintChips = document.getElementById("hint-chips");
 const searchForm = document.getElementById("search-form");
 const searchResults = document.getElementById("search-results");
+const detectionBar = document.getElementById("detection-bar");
+
+let latestDetections = [];
+let activeDetectionIndex = 0;
 
 function money(amount, currency = "USD") {
   if (amount == null) return "—";
@@ -276,18 +281,85 @@ async function toUploadableImage(file) {
   }
 }
 
+function showDetection(detection, index, total) {
+  activeDetectionIndex = index;
+  if (detection?.previewDataUrl) {
+    previewImg.src = detection.previewDataUrl;
+  }
+  previewEyebrow.textContent =
+    total > 1 ? `Card ${index + 1} of ${total}` : "Your photo";
+
+  detectionBar.querySelectorAll(".detection-chip").forEach((chip) => {
+    chip.classList.toggle("is-active", Number(chip.dataset.index) === index);
+  });
+
+  if (detection?.error) {
+    showError(detection.error);
+    renderHints(null);
+    return;
+  }
+
+  renderHints(detection?.hints);
+  const cards = detection?.cards || [];
+  let selected = detection?.best || cards[0] || null;
+  renderBest(selected, detection?.hints);
+  renderAlts(cards.slice(1, 7), (card) => {
+    selected = card;
+    renderBest(selected, detection?.hints);
+  });
+}
+
+function renderDetectionBar(detections) {
+  if (!detections?.length || detections.length < 2) {
+    detectionBar.hidden = true;
+    detectionBar.innerHTML = "";
+    return;
+  }
+
+  detectionBar.hidden = false;
+  detectionBar.innerHTML = detections
+    .map((d, i) => {
+      const title = d.best?.name || (d.error ? "Unmatched" : `Card ${i + 1}`);
+      const price = d.best?.headline
+        ? money(d.best.headline.amount, d.best.headline.currency)
+        : d.error
+          ? "—"
+          : "…";
+      return `
+        <button type="button" class="detection-chip${i === 0 ? " is-active" : ""}" data-index="${i}">
+          <img src="${escapeHtml(d.previewDataUrl || "")}" alt="" />
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            <span>${price}</span>
+          </div>
+        </button>`;
+    })
+    .join("");
+
+  detectionBar.querySelectorAll(".detection-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const idx = Number(chip.dataset.index);
+      showDetection(latestDetections[idx], idx, latestDetections.length);
+    });
+  });
+}
+
 async function appraiseFile(file) {
   workspace.hidden = false;
   workspace.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const previewUrl = URL.createObjectURL(file);
   previewImg.src = previewUrl;
+  previewEyebrow.textContent = "Your photo";
   renderHints(null);
+  detectionBar.hidden = true;
+  detectionBar.innerHTML = "";
+  latestDetections = [];
   setLoading("Preparing photo…");
 
   try {
     const uploadFile = await toUploadableImage(file);
-    setLoading("Reading the card…");
+    setLoading("Finding cards in the photo…");
 
     const body = new FormData();
     body.append("image", uploadFile, uploadFile.name || "card.jpg");
@@ -296,14 +368,29 @@ async function appraiseFile(file) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Appraisal failed");
 
-    renderHints(data.hints);
-    const cards = data.cards || [];
-    let selected = data.best || cards[0] || null;
-    renderBest(selected, data.hints);
-    renderAlts(cards.slice(1, 7), (card) => {
-      selected = card;
-      renderBest(selected, data.hints);
-    });
+    latestDetections =
+      data.detections?.length
+        ? data.detections
+        : [
+            {
+              index: 0,
+              previewDataUrl: previewUrl,
+              hints: data.hints,
+              cards: data.cards || [],
+              best: data.best,
+              error: null,
+            },
+          ];
+
+    const count = latestDetections.length;
+    setLoading(
+      count > 1
+        ? `Found ${count} cards — pricing…`
+        : "Reading the card…"
+    );
+
+    renderDetectionBar(latestDetections);
+    showDetection(latestDetections[0], 0, count);
   } catch (err) {
     showError(err.message || "Something went wrong while appraising that photo.");
   }

@@ -4,14 +4,9 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { fileURLToPath } from "url";
-import { identifyFromImage } from "./lib/ocr.js";
-import { rankByVisualSimilarity } from "./lib/imageMatch.js";
-import {
-  applyFinishHeadline,
-  enrichCardFinishes,
-  getPokemonTcgCard,
-  resolveCards,
-} from "./lib/prices.js";
+import { appraiseCardBuffer } from "./lib/appraise.js";
+import { detectCardCrops } from "./lib/detectCards.js";
+import { getPokemonTcgCard, resolveCards } from "./lib/prices.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -62,7 +57,7 @@ app.get("/api/search", async (req, res) => {
 });
 
 /**
- * Photo → OCR hints → ranked cards with live market prices.
+ * Photo → detect one or more cards → OCR/match/price each.
  */
 app.post("/api/appraise", upload.single("image"), async (req, res) => {
   try {
@@ -71,7 +66,6 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
       return;
     }
 
-    // Keep the latest upload for debugging wrong-print matches
     try {
       const debugDir = path.join(__dirname, "tmp");
       await fs.mkdir(debugDir, { recursive: true });
@@ -80,29 +74,48 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
       console.warn("debug upload save failed:", err.message);
     }
 
-    const hints = await identifyFromImage(req.file.buffer);
-    const { source, cards: rawCards } = await resolveCards(hints);
+    const crops = await detectCardCrops(req.file.buffer);
 
-    // When the collector number is missing/weak, many prints share a name.
-    // Re-rank by visual similarity to the official scans.
-    let cards = await rankByVisualSimilarity(req.file.buffer, rawCards, {
-      limit: Math.min(16, rawCards.length || 0),
-    });
+    // Appraise crops sequentially to avoid hammering upstream APIs / OCR CPU
+    const detections = [];
+    for (const crop of crops) {
+      try {
+        const result = await appraiseCardBuffer(crop.buffer);
+        detections.push({
+          index: crop.index,
+          box: crop.box,
+          previewDataUrl: `data:image/jpeg;base64,${crop.previewJpeg.toString("base64")}`,
+          hints: result.hints,
+          source: result.source,
+          cards: result.cards,
+          best: result.best,
+          error: null,
+        });
+      } catch (err) {
+        console.error(`crop ${crop.index} failed:`, err);
+        detections.push({
+          index: crop.index,
+          box: crop.box,
+          previewDataUrl: `data:image/jpeg;base64,${crop.previewJpeg.toString("base64")}`,
+          hints: null,
+          source: null,
+          cards: [],
+          best: null,
+          error: err.message || "Appraisal failed",
+        });
+      }
+    }
 
-    // Pull reverse-holo / stamped finish prices, then pick the right headline
-    const head = await Promise.all(
-      cards.slice(0, 8).map(async (card) => {
-        const enriched = await enrichCardFinishes(card);
-        return applyFinishHeadline(enriched, hints.finish || {});
-      })
-    );
-    cards = [...head, ...cards.slice(8)];
-
+    // Back-compat single-card fields (first detection)
+    const primary = detections[0] || null;
     const payload = {
-      hints,
-      source,
-      cards,
-      best: cards[0] || null,
+      detectionCount: detections.length,
+      detections,
+      // legacy single-card shape used by older clients
+      hints: primary?.hints || null,
+      source: primary?.source || null,
+      cards: primary?.cards || [],
+      best: primary?.best || null,
     };
 
     try {
@@ -112,26 +125,26 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
         JSON.stringify(
           {
             at: new Date().toISOString(),
-            hints,
-            source,
-            best: payload.best && {
-              id: payload.best.id,
-              name: payload.best.name,
-              number: payload.best.number,
-              set: payload.best.set?.name,
-              matchScore: payload.best.matchScore,
-              visualScore: payload.best.visualScore,
-              visualDistance: payload.best.visualDistance,
-              headline: payload.best.headline,
-            },
-            top: cards.slice(0, 8).map((c) => ({
-              id: c.id,
-              name: c.name,
-              number: c.number,
-              set: c.set?.name,
-              matchScore: c.matchScore,
-              visualScore: c.visualScore,
-              visualDistance: c.visualDistance,
+            detectionCount: detections.length,
+            detections: detections.map((d) => ({
+              index: d.index,
+              box: d.box,
+              best: d.best && {
+                id: d.best.id,
+                name: d.best.name,
+                number: d.best.number,
+                set: d.best.set?.name,
+                headline: d.best.headline,
+                finishHints: d.best.finishHints,
+              },
+              hints: d.hints && {
+                names: d.hints.names,
+                numbers: d.hints.numbers,
+                hp: d.hints.hp,
+                attacks: d.hints.attacks,
+                finish: d.hints.finish,
+              },
+              error: d.error,
             })),
           },
           null,
@@ -139,7 +152,7 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
         )
       );
     } catch {
-      // ignore debug write errors
+      // ignore
     }
 
     res.json(payload);
@@ -149,9 +162,6 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
   }
 });
 
-/**
- * Direct card fetch by Pokémon TCG id (e.g. base1-4).
- */
 app.get("/api/cards/:id", async (req, res) => {
   try {
     const card = await getPokemonTcgCard(req.params.id);

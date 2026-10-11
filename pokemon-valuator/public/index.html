@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=6" />
+  <link rel="stylesheet" href="/styles.css?v=7" />
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -54,9 +54,10 @@
     </section>
 
     <section class="workspace" id="workspace" hidden>
+      <div id="detection-bar" class="detection-bar" hidden></div>
       <div class="workspace-inner">
         <div class="preview-pane">
-          <p class="eyebrow">Your photo</p>
+          <p class="eyebrow" id="preview-eyebrow">Your photo</p>
           <div class="preview-frame">
             <img id="preview-img" alt="Uploaded Pokémon card preview" />
           </div>
@@ -78,17 +79,17 @@
 
     <section class="how" id="how">
       <h2>How it works</h2>
-      <p class="section-lede">Three steps from phone camera to a dollar figure.</p>
+      <p class="section-lede">From phone camera to a dollar figure — one card or a whole spread.</p>
       <ol class="steps">
         <li>
           <span class="step-num">01</span>
           <h3>Capture</h3>
-          <p>Take a clear, well-lit photo of the face of the card — name and collector number visible.</p>
+          <p>Photograph one card or several laid out flat. Keep names and collector numbers readable.</p>
         </li>
         <li>
           <span class="step-num">02</span>
           <h3>Identify</h3>
-          <p>OCR pulls the Pokémon name, HP, and set number, then ranks catalogue matches.</p>
+          <p>We find each card in the frame, read the print, and match set / finish.</p>
         </li>
         <li>
           <span class="step-num">03</span>
@@ -123,6 +124,6 @@
     </p>
   </footer>
 
-  <script type="module" src="/app.js?v=6"></script>
+  <script type="module" src="/app.js?v=7"></script>
 </body>
 </html>
