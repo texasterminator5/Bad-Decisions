@@ -3,10 +3,19 @@ import sharp from "sharp";
 import { findNamesInText, getPokemonNames } from "./pokemonNames.js";
 
 const NUMBER_RE =
-  /\b([A-Z]{0,3}\d{1,3})\s*\/\s*([A-Z]{0,3}\d{1,3})\b/gi;
+  /\b([A-Z]{0,3}[\dOIlSZ]{1,3})\s*[\/|]\s*([A-Z]{0,3}[\dOIlSZ]{1,3})\b/gi;
 const HP_RE = /\b(\d{2,3})\s*HP\b/i;
 const NAME_BEFORE_HP_RE =
   /([A-Za-z][A-Za-z0-9'’.\- ]{1,40}?)\s+(\d{2,3})\s*HP\b/gi;
+
+function fixOcrDigits(s) {
+  return String(s || "")
+    .toUpperCase()
+    .replace(/O/g, "0")
+    .replace(/[IL]/g, "1")
+    .replace(/S/g, "5")
+    .replace(/Z/g, "2");
+}
 
 const NOISE =
   /^(basic|stage|trainer|energy|weakness|resistance|retreat|ability|pokémon|pokemon|power|attack|rule|item|supporter|stadium|evolves|from|length|weight|cost)$/i;
@@ -74,9 +83,14 @@ async function recognize(buffer) {
 
 function extractCollectorNumbers(text) {
   const found = [];
-  for (const match of text.matchAll(NUMBER_RE)) {
-    const local = match[1].toUpperCase();
-    const printed = match[2].toUpperCase();
+  // Normalize common OCR slash lookalikes before matching
+  const normalized = String(text || "").replace(/[|\\]/g, "/");
+  for (const match of normalized.matchAll(NUMBER_RE)) {
+    const local = fixOcrDigits(match[1]);
+    const printed = fixOcrDigits(match[2]);
+    // Ignore nonsense like 1/1 from attack text unless it looks like a set size
+    const printedN = Number(printed);
+    if (!Number.isFinite(printedN) || printedN < 10) continue;
     found.push({
       localId: local.replace(/^0+(\d)/, "$1"),
       localIdRaw: local,

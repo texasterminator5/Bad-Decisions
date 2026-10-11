@@ -26,17 +26,28 @@ async function fetchJson(url, init) {
 function buildPokemonTcgQuery({ name, number, hp }) {
   const parts = [];
   if (name) {
+    // Avoid quoted wildcard queries — they intermittently 500 on pokemontcg.io
     const cleaned = name.replace(/[^\w\s'.\-]/g, " ").trim();
-    parts.push(`name:"*${cleaned}*"`);
+    const token = cleaned.split(/\s+/).filter(Boolean)[0];
+    if (token) parts.push(`name:${token}*`);
   }
   if (number) {
     const n = String(number).replace(/^0+(\d)/, "$1");
-    parts.push(`number:"${n}"`);
+    parts.push(`number:${n}`);
   }
   if (hp) {
     parts.push(`hp:${hp}`);
   }
   return parts.join(" ");
+}
+
+async function fetchPokemonTcgCards(q, pageSize) {
+  const url = new URL(`${POKEMONTCG_BASE}/cards`);
+  url.searchParams.set("q", q);
+  url.searchParams.set("pageSize", String(pageSize));
+  url.searchParams.set("orderBy", "-set.releaseDate");
+  const data = await fetchJson(url);
+  return (data.data || []).map(mapPokemonTcgCard);
 }
 
 /**
@@ -46,26 +57,29 @@ export async function searchPokemonTcg({ name, number, hp, pageSize = 12 }) {
   const q = buildPokemonTcgQuery({ name, number, hp });
   if (!q) return [];
 
-  const url = new URL(`${POKEMONTCG_BASE}/cards`);
-  url.searchParams.set("q", q);
-  url.searchParams.set("pageSize", String(pageSize));
-  url.searchParams.set("orderBy", "-set.releaseDate");
-
   try {
-    const data = await fetchJson(url);
-    return (data.data || []).map(mapPokemonTcgCard);
+    return await fetchPokemonTcgCards(q, pageSize);
   } catch (err) {
-    if (name && number) {
-      const fallback = new URL(`${POKEMONTCG_BASE}/cards`);
-      fallback.searchParams.set("q", `name:"*${name}*"`);
-      fallback.searchParams.set("pageSize", String(pageSize));
-      const data = await fetchJson(fallback);
-      const mapped = (data.data || []).map(mapPokemonTcgCard);
-      const num = String(number).replace(/^0+(\d)/, "$1").toLowerCase();
-      const filtered = mapped.filter(
-        (c) => String(c.number).replace(/^0+(\d)/, "$1").toLowerCase() === num
-      );
-      return filtered.length ? filtered : mapped;
+    // Retry with simpler name-only query, then bare name
+    if (name) {
+      const token = name.replace(/[^\w\s'.\-]/g, " ").trim().split(/\s+/)[0];
+      const retries = [`name:${token}`, `name:${token}*`];
+      for (const retryQ of retries) {
+        try {
+          let mapped = await fetchPokemonTcgCards(retryQ, pageSize);
+          if (number) {
+            const num = String(number).replace(/^0+(\d)/, "$1").toLowerCase();
+            const filtered = mapped.filter(
+              (c) =>
+                String(c.number).replace(/^0+(\d)/, "$1").toLowerCase() === num
+            );
+            if (filtered.length) mapped = filtered;
+          }
+          if (mapped.length) return mapped;
+        } catch {
+          // continue
+        }
+      }
     }
     throw err;
   }
@@ -240,8 +254,8 @@ export async function resolveCards(hints = {}) {
   let source = "pokemontcg";
   const byId = new Map();
 
-  // Merge hits across top name candidates, then rank globally
-  for (const name of nameCandidates.slice(0, 4)) {
+  // Prefer the top OCR/dictionary guess; only fall back to weaker names if needed
+  for (const name of nameCandidates.slice(0, 3)) {
     try {
       let batch = await searchPokemonTcg({ name, number, hp });
       if (!batch.length) {
@@ -258,8 +272,21 @@ export async function resolveCards(hints = {}) {
       for (const card of batch) {
         if (!byId.has(card.id)) byId.set(card.id, card);
       }
+      // Strong primary hit — don't dilute with noisier OCR name guesses
+      if (byId.size && name === nameCandidates[0]) break;
     } catch {
-      // try next name
+      try {
+        const fallback = await searchTcgdex({ name, number });
+        for (const card of fallback) {
+          if (!byId.has(card.id)) byId.set(card.id, card);
+        }
+        if (byId.size && name === nameCandidates[0]) {
+          source = "tcgdex";
+          break;
+        }
+      } catch {
+        // try next name
+      }
     }
   }
 

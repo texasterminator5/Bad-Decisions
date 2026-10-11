@@ -72,11 +72,20 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
-function renderBest(card) {
+function renderBest(card, hints) {
   if (!card) {
-    showError(
-      "Couldn't match this photo to a catalogue card. Try a sharper shot of the name and collector number, or use manual search below."
-    );
+    const guess = hints?.names?.[0];
+    statusEl.hidden = true;
+    bestEl.hidden = true;
+    altsEl.hidden = true;
+    errorEl.hidden = false;
+    errorEl.innerHTML = guess
+      ? `Couldn't lock this print. OCR saw <strong>${escapeHtml(guess)}</strong> — try Manual search below, or retake with the name and bottom number sharp.`
+      : `Couldn't match this photo. Retake with the card name and collector number sharp and well lit, or use Manual search below.`;
+    if (guess && searchForm?.name) {
+      searchForm.name.value = guess;
+      searchForm.number.value = hints?.numbers?.[0]?.localIdRaw || "";
+    }
     return;
   }
 
@@ -250,10 +259,10 @@ async function appraiseFile(file) {
     renderHints(data.hints);
     const cards = data.cards || [];
     let selected = data.best || cards[0] || null;
-    renderBest(selected);
+    renderBest(selected, data.hints);
     renderAlts(cards.slice(1, 7), (card) => {
       selected = card;
-      renderBest(selected);
+      renderBest(selected, data.hints);
     });
   } catch (err) {
     showError(err.message || "Something went wrong while appraising that photo.");
