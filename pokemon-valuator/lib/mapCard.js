@@ -81,6 +81,7 @@ export function mapPokemonTcgCard(card) {
     artist: card.artist || null,
     hp: card.hp || null,
     types: card.types || [],
+    attacks: (card.attacks || []).map((a) => a.name).filter(Boolean),
     prices,
     headline: bestMarket(prices),
     links: {

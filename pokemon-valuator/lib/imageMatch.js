@@ -3,11 +3,52 @@ import sharp from "sharp";
 const HASH_SIZE = 16;
 
 /**
+ * Focus on the card body — phone photos include wood/table borders that
+ * destroy naive whole-frame hashes.
+ */
+async function cardFocusedBuffer(buffer) {
+  const image = sharp(buffer).rotate();
+  const meta = await image.metadata();
+  const width = meta.width || 1000;
+  const height = meta.height || 1400;
+
+  // Trim near-uniform borders, then take a centered card-shaped crop
+  const trimmed = await image
+    .clone()
+    .trim({ threshold: 18 })
+    .toBuffer({ resolveWithObject: true })
+    .catch(async () => ({
+      data: await image.clone().toBuffer(),
+      info: { width, height },
+    }));
+
+  const tw = trimmed.info.width || width;
+  const th = trimmed.info.height || height;
+  const sidePad = Math.floor(tw * 0.08);
+  const topPad = Math.floor(th * 0.06);
+  const bottomPad = Math.floor(th * 0.1);
+  const left = Math.max(0, sidePad);
+  const top = Math.max(0, topPad);
+  const cropW = Math.max(32, tw - sidePad * 2);
+  const cropH = Math.max(32, th - topPad - bottomPad);
+
+  return sharp(trimmed.data)
+    .extract({
+      left,
+      top,
+      width: Math.min(cropW, tw - left),
+      height: Math.min(cropH, th - top),
+    })
+    .normalize()
+    .toBuffer();
+}
+
+/**
  * Build a simple average-hash fingerprint for a card photo / official scan.
  */
 export async function averageHash(buffer) {
-  const { data, info } = await sharp(buffer)
-    .rotate()
+  const focused = await cardFocusedBuffer(buffer);
+  const { data, info } = await sharp(focused)
     .resize(HASH_SIZE, HASH_SIZE, { fit: "fill" })
     .grayscale()
     .raw()
@@ -44,9 +85,8 @@ async function fetchImageBuffer(url) {
 
 /**
  * Re-rank catalogue matches by visual similarity to the uploaded photo.
- * Returns cards with `visualScore` (higher is better) and boosted `matchScore`.
  */
-export async function rankByVisualSimilarity(uploadBuffer, cards, { limit = 12 } = {}) {
+export async function rankByVisualSimilarity(uploadBuffer, cards, { limit = 16 } = {}) {
   if (!uploadBuffer || !cards?.length) return cards || [];
 
   const uploadHash = await averageHash(uploadBuffer);
@@ -62,8 +102,7 @@ export async function rankByVisualSimilarity(uploadBuffer, cards, { limit = 12 }
         const buf = await fetchImageBuffer(url);
         const hash = await averageHash(buf);
         const distance = hammingDistance(uploadHash, hash);
-        // 256-bit hash (16x16). Lower distance = closer match.
-        const visualScore = Math.max(0, 120 - distance);
+        const visualScore = Math.max(0, 140 - distance);
         return { card, distance, visualScore };
       } catch {
         return { card, distance: 999, visualScore: 0 };

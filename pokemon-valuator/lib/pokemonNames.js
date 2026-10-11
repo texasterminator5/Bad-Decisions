@@ -220,13 +220,19 @@ export function findNamesInText(text, dictionary) {
       if (!folded || folded.length < 5) continue;
       const lenDiff = Math.abs(foldedToken.length - folded.length);
       if (lenDiff > 2) continue;
-      // Require same first letter after OCR folding
-      if (foldedToken[0] !== folded[0]) continue;
-
       const dist = editDistance(foldedToken, folded);
       const maxDist = thresholdFor(folded);
       // dist 0 already covered by exact pass; skip. Reject weak fuzzy hits.
       if (dist === 0 || dist > maxDist) continue;
+
+      // Prefer same first letter, but allow OCR first-letter flips
+      // when the rest is clearly the same (Motodile → Totodile).
+      const sameFirst = foldedToken[0] === folded[0];
+      const sharedSuffix =
+        foldedToken.length >= 6 &&
+        folded.length >= 6 &&
+        foldedToken.slice(1) === folded.slice(1);
+      if (!sameFirst && !(dist === 1 && sharedSuffix)) continue;
 
       let score = 34 - dist * 10;
       const approxIdx = normalized.indexOf(token.toLowerCase());

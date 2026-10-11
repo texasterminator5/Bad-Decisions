@@ -50,6 +50,23 @@ async function fetchPokemonTcgCards(q, pageSize) {
   return (data.data || []).map(mapPokemonTcgCard);
 }
 
+export async function searchPokemonTcgByAttack({ attack, hp, pageSize = 20 }) {
+  if (!attack) return [];
+  const token = String(attack).replace(/[^\w\s'.\-]/g, " ").trim().split(/\s+/)[0];
+  if (!token || token.length < 4) return [];
+  const parts = [`attacks.name:${token}*`];
+  if (hp) parts.push(`hp:${hp}`);
+  try {
+    return await fetchPokemonTcgCards(parts.join(" "), pageSize);
+  } catch {
+    try {
+      return await fetchPokemonTcgCards(`attacks.name:${token}`, pageSize);
+    } catch {
+      return [];
+    }
+  }
+}
+
 /**
  * Search the Pokémon TCG API for matching cards.
  */
@@ -233,7 +250,16 @@ function scoreMatch(card, hints) {
     }
   }
 
-  if (hints.hp && card.hp && String(card.hp) === String(hints.hp)) score += 15;
+  if (hints.hp && card.hp && String(card.hp) === String(hints.hp)) score += 25;
+
+  const attackHints = (hints.attacks || []).map((a) => a.toLowerCase());
+  const cardAttacks = (card.attacks || []).map((a) => a.toLowerCase());
+  for (const attack of attackHints) {
+    if (cardAttacks.some((a) => a === attack || a.includes(attack) || attack.includes(a))) {
+      score += 60;
+    }
+  }
+
   if (card.headline?.amount != null) score += 2;
   return score;
 }
@@ -249,10 +275,23 @@ export async function resolveCards(hints = {}) {
   const number = hints.numbers?.[0]?.localIdRaw || hints.number || null;
   const printedTotal = hints.numbers?.[0]?.printedTotal || null;
   const hp = hints.hp || null;
+  const attacks = hints.attacks || [];
 
   let results = [];
   let source = "pokemontcg";
   const byId = new Map();
+
+  // Attack + HP is often more reliable than a mangled Pokémon name
+  for (const attack of attacks.slice(0, 3)) {
+    try {
+      const batch = await searchPokemonTcgByAttack({ attack, hp });
+      for (const card of batch) {
+        if (!byId.has(card.id)) byId.set(card.id, card);
+      }
+    } catch {
+      // continue
+    }
+  }
 
   // Prefer the top OCR/dictionary guess; only fall back to weaker names if needed
   for (const name of nameCandidates.slice(0, 3)) {

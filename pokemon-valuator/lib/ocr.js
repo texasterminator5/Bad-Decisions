@@ -1,5 +1,6 @@
 import Tesseract from "tesseract.js";
 import sharp from "sharp";
+import { extractAttackNames } from "./attacks.js";
 import { findNamesInText, getPokemonNames } from "./pokemonNames.js";
 
 const NUMBER_RE =
@@ -196,32 +197,25 @@ export async function identifyFromImage(buffer) {
     return true;
   });
 
+  // Only return Pokémon-dictionary names for search. Raw OCR tokens like
+  // "Fie" / "Splatter" previously poisoned lookups into trainer cards.
   const dictNames = findNamesInText(combined, dictionary);
-  const ocrNames = [
-    ...extractNameCandidates(topText),
-    ...extractNameCandidates(fullText),
-  ];
-
-  // Dictionary hits first — much more reliable than raw OCR lines
-  const cleanOcr = ocrNames.filter((n) => {
-    if (n.split(" ").length > 3) return false;
-    if (/[^A-Za-z0-9'’.\-\s]/.test(n)) return false;
-    // Require at least one capital letter token that looks like a title
-    return /[A-Z][a-z]{2,}/.test(n);
-  });
-  const names = [...dictNames, ...cleanOcr];
-  const seenName = new Set();
-  const uniqueNames = names.filter((n) => {
-    const key = n.toLowerCase();
-    if (seenName.has(key)) return false;
-    seenName.add(key);
-    return true;
+  const dictSet = new Set(dictionary);
+  const attacks = extractAttackNames(combined).filter((a) => {
+    const key = a.toLowerCase();
+    if (dictSet.has(key)) return false;
+    // Drop OCR near-misses of Pokémon names (Motodile → Totodile)
+    return !dictNames.some((n) => {
+      const dn = n.toLowerCase();
+      return key.slice(1) === dn.slice(1) || key.includes(dn) || dn.includes(key);
+    });
   });
 
   return {
     rawText: combined.trim(),
-    names: uniqueNames.slice(0, 8),
+    names: dictNames.slice(0, 6),
     numbers: uniqueNumbers.slice(0, 6),
     hp: extractHp(combined),
+    attacks: attacks.slice(0, 6),
   };
 }
