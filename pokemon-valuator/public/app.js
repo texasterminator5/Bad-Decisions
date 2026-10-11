@@ -107,6 +107,12 @@ function renderBest(card, hints) {
     )
     .join("");
 
+  const finishLabel = card.finishHints?.stamped
+    ? "Stamped reverse holo"
+    : card.finishHints?.reverseHolo
+      ? "Reverse holo"
+      : null;
+
   const setBits = [
     card.set?.name,
     card.number && card.set?.printedTotal
@@ -114,10 +120,27 @@ function renderBest(card, hints) {
       : card.number
         ? `#${card.number}`
         : null,
-    card.rarity,
+    finishLabel || card.rarity,
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const usdVariants = (card.prices || []).filter(
+    (p) => p.source === "TCGPlayer" && p.currency === "USD" && p.market != null
+  );
+  const variantButtons = usdVariants.length > 1
+    ? `<div class="variant-row" role="group" aria-label="Card finish">
+        ${usdVariants
+          .map((p) => {
+            const active =
+              headline &&
+              p.variant === headline.variant &&
+              p.market === headline.amount;
+            return `<button type="button" class="variant-btn${active ? " is-active" : ""}" data-variant="${escapeHtml(p.variant)}">${escapeHtml(variantLabel(p.variant))} · ${money(p.market, p.currency)}</button>`;
+          })
+          .join("")}
+      </div>`
+    : "";
 
   const links = [];
   if (card.links?.tcgplayer) {
@@ -133,9 +156,10 @@ function renderBest(card, hints) {
       <h3>${escapeHtml(card.name)}</h3>
       <p class="setline">${escapeHtml(setBits)}</p>
       <div class="price-hero">
-        <span class="amount">${headline ? money(headline.amount, headline.currency) : "n/a"}</span>
-        <span class="label">${headline ? `Market · ${escapeHtml(variantLabel(headline.variant))} · ${escapeHtml(headline.currency)}` : "No live market price found"}</span>
+        <span class="amount" id="headline-amount">${headline ? money(headline.amount, headline.currency) : "n/a"}</span>
+        <span class="label" id="headline-label">${headline ? `Market · ${escapeHtml(variantLabel(headline.variant))} · ${escapeHtml(headline.currency)}` : "No live market price found"}</span>
       </div>
+      ${variantButtons}
       ${
         priceRows
           ? `<table class="price-table">
@@ -149,6 +173,22 @@ function renderBest(card, hints) {
       ${links.length ? `<div class="links">${links.join("")}</div>` : ""}
     </div>
   `;
+
+  bestEl.querySelectorAll(".variant-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const variant = btn.dataset.variant;
+      const row = usdVariants.find((p) => p.variant === variant);
+      if (!row) return;
+      const amountEl = bestEl.querySelector("#headline-amount");
+      const labelEl = bestEl.querySelector("#headline-label");
+      if (amountEl) amountEl.textContent = money(row.market, row.currency);
+      if (labelEl) {
+        labelEl.textContent = `Market · ${variantLabel(row.variant)} · ${row.currency}`;
+      }
+      bestEl.querySelectorAll(".variant-btn").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+    });
+  });
 }
 
 function renderAlts(cards, onPick) {

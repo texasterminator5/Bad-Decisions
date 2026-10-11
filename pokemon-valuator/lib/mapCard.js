@@ -1,3 +1,5 @@
+import { pickHeadline } from "./finish.js";
+
 function formatMoney(n) {
   if (n == null || Number.isNaN(Number(n))) return null;
   return Number(n);
@@ -38,23 +40,8 @@ export function normalizeCardmarketPrices(cardmarket) {
   ].filter((row) => row.low != null || row.mid != null || row.market != null);
 }
 
-export function bestMarket(priceRows) {
-  const usd = priceRows.filter((p) => p.currency === "USD" && p.market != null);
-  if (!usd.length) {
-    const any = priceRows.find((p) => p.market != null);
-    return any
-      ? { amount: any.market, currency: any.currency, variant: any.variant }
-      : null;
-  }
-  const preferred =
-    usd.find((p) => /holo/i.test(p.variant) && !/reverse/i.test(p.variant)) ||
-    usd.find((p) => /normal/i.test(p.variant)) ||
-    usd[0];
-  return {
-    amount: preferred.market,
-    currency: preferred.currency,
-    variant: preferred.variant,
-  };
+export function bestMarket(priceRows, finishHints) {
+  return pickHeadline(priceRows, finishHints);
 }
 
 export function mapPokemonTcgCard(card) {

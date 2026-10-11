@@ -1,3 +1,4 @@
+import { pickHeadline } from "./finish.js";
 import { bestMarket, mapPokemonTcgCard } from "./mapCard.js";
 
 const POKEMONTCG_BASE = "https://api.pokemontcg.io/v2";
@@ -107,6 +108,122 @@ export async function getPokemonTcgCard(id) {
     `${POKEMONTCG_BASE}/cards/${encodeURIComponent(id)}`
   );
   return mapPokemonTcgCard(data.data);
+}
+
+/**
+ * Merge TCGdex finish prices (esp. reverse-holofoil) onto a mapped card.
+ */
+export async function enrichCardFinishes(card) {
+  if (!card?.id) return card;
+  try {
+    const detail = await fetchJson(
+      `${TCGDEX_BASE}/cards/${encodeURIComponent(card.id)}`
+    );
+    const tp = detail.pricing?.tcgplayer;
+    if (!tp) return card;
+
+    const existing = new Set(
+      (card.prices || []).map((p) => `${p.source}:${p.variant}:${p.currency}`)
+    );
+    const prices = [...(card.prices || [])];
+
+    for (const [variant, row] of Object.entries(tp)) {
+      if (
+        !row ||
+        typeof row !== "object" ||
+        !("marketPrice" in row || "lowPrice" in row)
+      ) {
+        continue;
+      }
+      const key = `TCGPlayer:${variant}:USD`;
+      if (existing.has(key)) continue;
+      prices.push({
+        source: "TCGPlayer",
+        variant,
+        low: formatMoney(row.lowPrice),
+        mid: formatMoney(row.midPrice),
+        high: formatMoney(row.highPrice),
+        market: formatMoney(row.marketPrice),
+        directLow: formatMoney(row.directLowPrice),
+        currency: "USD",
+        url: null,
+        updatedAt: tp.updated || null,
+      });
+    }
+
+    // Cardmarket reverse/holo trend when present
+    const cm = detail.pricing?.cardmarket;
+    if (cm?.["trend-holo"] != null) {
+      prices.push({
+        source: "Cardmarket",
+        variant: "reverseHolo",
+        low: formatMoney(cm["low-holo"]),
+        mid: formatMoney(cm["avg-holo"]),
+        high: null,
+        market: formatMoney(cm["trend-holo"]),
+        directLow: null,
+        currency: cm.unit || "EUR",
+        url: null,
+        updatedAt: cm.updated || null,
+      });
+    }
+
+    const stamped =
+      Array.isArray(detail.variants_detailed) &&
+      detail.variants_detailed.some(
+        (v) =>
+          /reverse/i.test(v.type || "") &&
+          Array.isArray(v.stamp) &&
+          v.stamp.length > 0
+      );
+
+    return {
+      ...card,
+      prices,
+      finishes: {
+        hasReverse: prices.some((p) => /reverse/i.test(p.variant)),
+        stampedReverseAvailable: Boolean(stamped),
+        variants: detail.variants || null,
+      },
+      headline: card.headline,
+    };
+  } catch {
+    return card;
+  }
+}
+
+export function applyFinishHeadline(card, finishHints = {}) {
+  if (!card) return card;
+  const hints = { ...finishHints };
+
+  // Catalogue knows this print's reverse is the stamped set-logo version
+  if (card.finishes?.stampedReverseAvailable) {
+    if (finishHints?.stamped || finishHints?.reverseHolo || (finishHints?.confidence || 0) >= 25) {
+      hints.stamped = true;
+      hints.reverseHolo = true;
+    }
+  }
+
+  if (finishHints?.stamped || finishHints?.reverseHolo) {
+    hints.reverseHolo = true;
+  }
+
+  // Reinforce: matched set name appears in stamp OCR reasons / raw cues
+  const setName = (card.set?.name || "").toLowerCase();
+  if (
+    card.finishes?.stampedReverseAvailable &&
+    setName &&
+    (finishHints?.reasons || []).some((r) => /set-stamp/i.test(r))
+  ) {
+    hints.stamped = true;
+    hints.reverseHolo = true;
+  }
+
+  return {
+    ...card,
+    finishHints: hints,
+    headline: pickHeadline(card.prices, hints),
+  };
 }
 
 /**

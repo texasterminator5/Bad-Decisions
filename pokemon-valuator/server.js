@@ -6,7 +6,12 @@ import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import { identifyFromImage } from "./lib/ocr.js";
 import { rankByVisualSimilarity } from "./lib/imageMatch.js";
-import { getPokemonTcgCard, resolveCards } from "./lib/prices.js";
+import {
+  applyFinishHeadline,
+  enrichCardFinishes,
+  getPokemonTcgCard,
+  resolveCards,
+} from "./lib/prices.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -80,9 +85,18 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
 
     // When the collector number is missing/weak, many prints share a name.
     // Re-rank by visual similarity to the official scans.
-    const cards = await rankByVisualSimilarity(req.file.buffer, rawCards, {
+    let cards = await rankByVisualSimilarity(req.file.buffer, rawCards, {
       limit: Math.min(16, rawCards.length || 0),
     });
+
+    // Pull reverse-holo / stamped finish prices, then pick the right headline
+    const head = await Promise.all(
+      cards.slice(0, 8).map(async (card) => {
+        const enriched = await enrichCardFinishes(card);
+        return applyFinishHeadline(enriched, hints.finish || {});
+      })
+    );
+    cards = [...head, ...cards.slice(8)];
 
     const payload = {
       hints,

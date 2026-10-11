@@ -1,6 +1,7 @@
 import Tesseract from "tesseract.js";
 import sharp from "sharp";
 import { extractAttackNames } from "./attacks.js";
+import { detectFinishHints } from "./finish.js";
 import { findNamesInText, getPokemonNames } from "./pokemonNames.js";
 
 const NUMBER_RE =
@@ -72,7 +73,39 @@ export async function preprocessForOcr(buffer) {
     .png()
     .toBuffer();
 
-  return { full, top, bottom };
+  // EX reverse holos often stamp the set name in the lower-right of the art box.
+  // Capture a couple crops/thresholds so fragments like "FORCES" still land.
+  const stampA = await sharp(buffer)
+    .rotate()
+    .extract({
+      left: Math.floor(width * 0.42),
+      top: Math.floor(height * 0.38),
+      width: Math.max(40, Math.floor(width * 0.52)),
+      height: Math.max(40, Math.floor(height * 0.2)),
+    })
+    .resize({ width: 1400, withoutEnlargement: false })
+    .grayscale()
+    .normalize()
+    .sharpen()
+    .png()
+    .toBuffer();
+
+  const stampB = await sharp(buffer)
+    .rotate()
+    .extract({
+      left: Math.floor(width * 0.5),
+      top: Math.floor(height * 0.45),
+      width: Math.max(40, Math.floor(width * 0.45)),
+      height: Math.max(40, Math.floor(height * 0.14)),
+    })
+    .resize({ width: 1400, withoutEnlargement: false })
+    .grayscale()
+    .normalize()
+    .threshold(145)
+    .png()
+    .toBuffer();
+
+  return { full, top, bottom, stampA, stampB };
 }
 
 async function recognize(buffer) {
@@ -177,15 +210,18 @@ function extractNameCandidates(text) {
  */
 export async function identifyFromImage(buffer) {
   const dictionary = await getPokemonNames();
-  const { full, top, bottom } = await preprocessForOcr(buffer);
+  const { full, top, bottom, stampA, stampB } = await preprocessForOcr(buffer);
 
-  const [fullText, topText, bottomText] = await Promise.all([
-    recognize(full),
-    recognize(top),
-    recognize(bottom),
-  ]);
+  const [fullText, topText, bottomText, stampTextA, stampTextB] =
+    await Promise.all([
+      recognize(full),
+      recognize(top),
+      recognize(bottom),
+      recognize(stampA),
+      recognize(stampB),
+    ]);
 
-  const combined = `${topText}\n${fullText}\n${bottomText}`;
+  const combined = `${topText}\n${fullText}\n${bottomText}\n${stampTextA}\n${stampTextB}`;
   const numbers = [
     ...extractCollectorNumbers(bottomText),
     ...extractCollectorNumbers(fullText),
@@ -211,11 +247,13 @@ export async function identifyFromImage(buffer) {
     });
   });
 
+  const rawText = combined.trim();
   return {
-    rawText: combined.trim(),
+    rawText,
     names: dictNames.slice(0, 6),
     numbers: uniqueNumbers.slice(0, 6),
     hp: extractHp(combined),
     attacks: attacks.slice(0, 6),
+    finish: detectFinishHints(rawText),
   };
 }
