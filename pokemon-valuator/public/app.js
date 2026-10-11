@@ -159,7 +159,7 @@ function renderAlts(cards, onPick) {
   }
   altsEl.hidden = false;
   altsEl.innerHTML = `
-    <h4>Other possible matches</h4>
+    <h4>Not the right print? Tap the correct one</h4>
     <div class="alt-list">
       ${cards
         .map((c, i) => {
@@ -171,7 +171,7 @@ function renderAlts(cards, onPick) {
               <img src="${escapeHtml(c.images?.small || "")}" alt="" />
               <div>
                 <strong>${escapeHtml(c.name)}</strong>
-                <span>${escapeHtml(c.set?.name || "")}${c.number ? ` · #${escapeHtml(c.number)}` : ""}</span>
+                <span>${escapeHtml(c.set?.name || "")}${c.number ? ` · #${escapeHtml(c.number)}` : ""}${c.rarity ? ` · ${escapeHtml(c.rarity)}` : ""}</span>
               </div>
               <div class="alt-price">${price}</div>
             </button>`;

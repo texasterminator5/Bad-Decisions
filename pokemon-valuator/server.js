@@ -2,8 +2,10 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import path from "path";
+import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import { identifyFromImage } from "./lib/ocr.js";
+import { rankByVisualSimilarity } from "./lib/imageMatch.js";
 import { getPokemonTcgCard, resolveCards } from "./lib/prices.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,15 +66,69 @@ app.post("/api/appraise", upload.single("image"), async (req, res) => {
       return;
     }
 
-    const hints = await identifyFromImage(req.file.buffer);
-    const { source, cards } = await resolveCards(hints);
+    // Keep the latest upload for debugging wrong-print matches
+    try {
+      const debugDir = path.join(__dirname, "tmp");
+      await fs.mkdir(debugDir, { recursive: true });
+      await fs.writeFile(path.join(debugDir, "last-upload.jpg"), req.file.buffer);
+    } catch (err) {
+      console.warn("debug upload save failed:", err.message);
+    }
 
-    res.json({
+    const hints = await identifyFromImage(req.file.buffer);
+    const { source, cards: rawCards } = await resolveCards(hints);
+
+    // When the collector number is missing/weak, many prints share a name.
+    // Re-rank by visual similarity to the official scans.
+    const cards = await rankByVisualSimilarity(req.file.buffer, rawCards, {
+      limit: Math.min(16, rawCards.length || 0),
+    });
+
+    const payload = {
       hints,
       source,
       cards,
       best: cards[0] || null,
-    });
+    };
+
+    try {
+      const debugDir = path.join(__dirname, "tmp");
+      await fs.writeFile(
+        path.join(debugDir, "last-appraisal.json"),
+        JSON.stringify(
+          {
+            at: new Date().toISOString(),
+            hints,
+            source,
+            best: payload.best && {
+              id: payload.best.id,
+              name: payload.best.name,
+              number: payload.best.number,
+              set: payload.best.set?.name,
+              matchScore: payload.best.matchScore,
+              visualScore: payload.best.visualScore,
+              visualDistance: payload.best.visualDistance,
+              headline: payload.best.headline,
+            },
+            top: cards.slice(0, 8).map((c) => ({
+              id: c.id,
+              name: c.name,
+              number: c.number,
+              set: c.set?.name,
+              matchScore: c.matchScore,
+              visualScore: c.visualScore,
+              visualDistance: c.visualDistance,
+            })),
+          },
+          null,
+          2
+        )
+      );
+    } catch {
+      // ignore debug write errors
+    }
+
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Appraisal failed" });

@@ -53,7 +53,7 @@ async function fetchPokemonTcgCards(q, pageSize) {
 /**
  * Search the Pokémon TCG API for matching cards.
  */
-export async function searchPokemonTcg({ name, number, hp, pageSize = 12 }) {
+export async function searchPokemonTcg({ name, number, hp, pageSize = 24 }) {
   const q = buildPokemonTcgQuery({ name, number, hp });
   if (!q) return [];
 

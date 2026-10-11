@@ -6,3 +6,5 @@ uploads/
 tmp/
 *.traineddata
 eng.traineddata
+last-upload.jpg
+last-appraisal.json
