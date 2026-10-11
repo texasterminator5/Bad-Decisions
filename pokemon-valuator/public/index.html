@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Valuedex — snap a Pokémon card photo and see live market prices." />
+  <title>Valuedex — Pokémon Card Values from a Photo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="mark" href="/" aria-label="Valuedex home">
+      <span class="mark-dot" aria-hidden="true"></span>
+      Valuedex
+    </a>
+    <nav class="topnav">
+      <a href="#how">How it works</a>
+      <a href="#manual">Manual search</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="top">
+      <div class="hero-bg" aria-hidden="true">
+        <div class="hero-orb hero-orb-a"></div>
+        <div class="hero-orb hero-orb-b"></div>
+        <div class="hero-grid"></div>
+      </div>
+
+      <div class="hero-copy">
+        <p class="brand-lockup">Valuedex</p>
+        <h1>Snap a card.<br />Know the market.</h1>
+        <p class="lede">
+          Upload a photo of any Pokémon TCG card. We read the print, match the set, and pull live TCGPlayer market prices.
+        </p>
+
+        <form id="upload-form" class="cta-row">
+          <label class="btn btn-primary file-btn">
+            <input id="file-input" type="file" accept="image/*" capture="environment" hidden />
+            Check a card photo
+          </label>
+          <button type="button" class="btn btn-ghost" id="demo-btn" title="Try with a sample Base Set Charizard lookup">
+            Try a sample search
+          </button>
+        </form>
+        <p class="fineprint">Photos stay on this machine for the request only — nothing is stored.</p>
+      </div>
+    </section>
+
+    <section class="workspace" id="workspace" hidden>
+      <div class="workspace-inner">
+        <div class="preview-pane">
+          <p class="eyebrow">Your photo</p>
+          <div class="preview-frame">
+            <img id="preview-img" alt="Uploaded Pokémon card preview" />
+          </div>
+          <div id="hint-chips" class="chips" hidden></div>
+        </div>
+
+        <div class="result-pane">
+          <div id="status" class="status" role="status" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Reading the card…</p>
+          </div>
+
+          <div id="best-result" class="best" hidden></div>
+          <div id="alt-results" class="alts" hidden></div>
+          <p id="error-box" class="error" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="how" id="how">
+      <h2>How it works</h2>
+      <p class="section-lede">Three steps from phone camera to a dollar figure.</p>
+      <ol class="steps">
+        <li>
+          <span class="step-num">01</span>
+          <h3>Capture</h3>
+          <p>Take a clear, well-lit photo of the face of the card — name and collector number visible.</p>
+        </li>
+        <li>
+          <span class="step-num">02</span>
+          <h3>Identify</h3>
+          <p>OCR pulls the Pokémon name, HP, and set number, then ranks catalogue matches.</p>
+        </li>
+        <li>
+          <span class="step-num">03</span>
+          <h3>Price</h3>
+          <p>Live market, low, mid, and high quotes from TCGPlayer (USD) and Cardmarket (EUR).</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="manual" id="manual">
+      <h2>Manual search</h2>
+      <p class="section-lede">Already know the card? Look it up by name.</p>
+      <form id="search-form" class="search-form">
+        <label class="field">
+          <span>Card name</span>
+          <input name="name" type="text" placeholder="e.g. Charizard ex" required autocomplete="off" />
+        </label>
+        <label class="field field-narrow">
+          <span>Number</span>
+          <input name="number" type="text" placeholder="optional" autocomplete="off" />
+        </label>
+        <button class="btn btn-primary" type="submit">Search prices</button>
+      </form>
+      <div id="search-results" class="search-results" hidden></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      Valuedex uses public Pokémon TCG catalogue data and marketplace price feeds.
+      Prices are guides, not offers — condition, edition, and grading change value.
+    </p>
+  </footer>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
