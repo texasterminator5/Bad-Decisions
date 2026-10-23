@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b1f17" />
+    <meta
+      name="description"
+      content="Snap a 9-pocket binder page of baseball cards. NineSlot reads each slot and looks up market values."
+    />
+    <title>NineSlot — Binder page baseball card values</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="field-glow" aria-hidden="true"></div>
+    <div class="chalk-noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="mark" href="/">
+        <span class="mark-diamond" aria-hidden="true"></span>
+        NineSlot
+      </a>
+      <nav class="topnav">
+        <a href="#how">How</a>
+        <a href="#search">Search</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="brand-lockup">NineSlot</p>
+        <h1>Nine pockets. One snap.</h1>
+        <p class="lede">
+          Photograph a full binder page of baseball cards — we split the nine
+          slots, read each card, and pull guide values.
+        </p>
+        <div class="cta-row">
+          <label class="btn primary">
+            <input
+              id="camera-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+            />
+            Take binder photo
+          </label>
+          <label class="btn ghost">
+            <input id="library-input" type="file" accept="image/*" hidden />
+            Choose from library
+          </label>
+        </div>
+        <div class="hero-stage" aria-hidden="true">
+          <div class="binder-preview">
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+            <div class="pocket"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace" class="workspace" hidden>
+        <div class="workspace-head">
+          <div>
+            <p class="eyebrow" id="preview-eyebrow">Scanning page…</p>
+            <h2 id="page-summary">Binder page</h2>
+          </div>
+          <div class="page-total" id="page-total" hidden>
+            <span class="page-total-label">Page guide</span>
+            <span class="page-total-amount" id="page-total-amount">—</span>
+          </div>
+        </div>
+
+        <div class="preview-wrap">
+          <img id="preview-img" alt="Uploaded binder page" />
+        </div>
+
+        <div id="status" class="status" hidden></div>
+        <div id="error-box" class="error-box" hidden></div>
+
+        <div id="slot-grid" class="slot-grid" hidden></div>
+
+        <div id="detail-panel" class="detail-panel" hidden></div>
+      </section>
+
+      <section id="how" class="how">
+        <h2>How it works</h2>
+        <p>
+          Point your phone at a standard 9-pocket page. Keep the sheet flat,
+          fill the frame, and shoot in decent light so names and card numbers
+          stay sharp.
+        </p>
+        <ol>
+          <li>We carve the photo into nine slots (binder grid).</li>
+          <li>OCR reads player, year, set, and number on each crop.</li>
+          <li>
+            Matches hit the MyCardfolio catalogue; guide prices come from
+            SportsCardsPro (raw low / mid / gem high).
+          </li>
+        </ol>
+        <p class="fineprint">
+          Values are marketplace guides, not formal appraisals. Condition,
+          grading, and parallels move the number a lot — tap eBay sold comps for
+          live sales.
+        </p>
+      </section>
+
+      <section id="search" class="search-block">
+        <h2>Manual search</h2>
+        <p>OCR miss? Type year, set, player, and number.</p>
+        <form id="search-form" class="search-form">
+          <input
+            name="q"
+            type="search"
+            placeholder="1989 Upper Deck Ken Griffey Jr #1"
+            required
+            autocomplete="off"
+          />
+          <button type="submit" class="btn primary compact">Look up</button>
+        </form>
+        <div id="search-results" class="search-results" hidden></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>NineSlot</span>
+      <span>Baseball binder page scanner</span>
+    </footer>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
